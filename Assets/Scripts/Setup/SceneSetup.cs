@@ -333,23 +333,43 @@ public class SceneSetup : MonoBehaviour
     private void BuildBot()
     {
         GameObject bot = new GameObject("Enemy_Bot");
-        bot.transform.position = new Vector3(20, 1f, 20);
+        // Spawn closer to center so player can find it
+        bot.transform.position = new Vector3(15, 1.5f, 15);
 
-        // Capsule body
+        // Bright emissive material for visibility
+        Material botMat = new Material(Shader.Find("HDRP/Lit"));
+        botMat.SetColor("_BaseColor", new Color(1f, 0.15f, 0.15f));
+        if (botMat.HasProperty("_EmissiveColor"))
+        {
+            botMat.SetColor("_EmissiveColor", new Color(1.5f, 0f, 0f));
+            botMat.EnableKeyword("_EMISSION");
+        }
+
+        // Capsule body (no collider — CharacterController handles physics)
         GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         body.name = "Body";
         body.transform.parent = bot.transform;
         body.transform.localPosition = new Vector3(0, 1f, 0);
-        body.GetComponent<Renderer>().material = redMat;
+        Destroy(body.GetComponent<Collider>());
+        body.GetComponent<Renderer>().material = botMat;
 
-        // Head (for headshots)
+        // Head (with collider for headshot detection)
         GameObject head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         head.name = "Head";
-        head.tag = "Head"; // We'll need to create this tag
+        head.tag = "Head";
         head.transform.parent = bot.transform;
         head.transform.localPosition = new Vector3(0, 2.1f, 0);
-        head.transform.localScale = new Vector3(0.4f, 0.4f, 0.4f);
-        head.GetComponent<Renderer>().material = redMat;
+        head.transform.localScale = new Vector3(0.45f, 0.45f, 0.45f);
+        head.GetComponent<Renderer>().material = botMat;
+
+        // Body hitbox (separate from visual so headshot tag works correctly)
+        GameObject hitbox = new GameObject("BodyHitbox");
+        hitbox.transform.parent = bot.transform;
+        hitbox.transform.localPosition = new Vector3(0, 1f, 0);
+        CapsuleCollider hitCol = hitbox.AddComponent<CapsuleCollider>();
+        hitCol.height = 1.6f;
+        hitCol.radius = 0.4f;
+        hitCol.isTrigger = false;
 
         // Eye point
         GameObject eye = new GameObject("EyePoint");
@@ -365,11 +385,14 @@ public class SceneSetup : MonoBehaviour
         // Health
         PlayerHealth health = bot.AddComponent<PlayerHealth>();
 
-        // Bot AI
+        // Bot AI — start aggressive so it always seeks the player
         EnemyBot botAI = bot.AddComponent<EnemyBot>();
         botAI.eyePoint = eye.transform;
-        botAI.accuracy = 0.6f;
-        botAI.reactionTime = 0.4f;
+        botAI.accuracy = 0.55f;
+        botAI.reactionTime = 0.5f;
+        botAI.detectionRange = 80f; // larger so it spots player anywhere on map
+
+        Debug.Log($"[SceneSetup] Bot spawned at {bot.transform.position}");
     }
 
     // ──────────────────────────────────────────────

@@ -55,7 +55,10 @@ public class EnemyBot : MonoBehaviour
         patrolTarget = transform.position;
         SetNewPatrolTarget();
 
-        Debug.Log("[Bot] Enemy bot initialized at " + transform.position);
+        // Start in chase mode so the bot actively goes toward the player
+        if (player != null) state = BotState.Chase;
+
+        Debug.Log($"[Bot] Initialized at {transform.position} | Player: {(player != null ? player.position.ToString() : "NOT FOUND")}");
     }
 
     void Update()
