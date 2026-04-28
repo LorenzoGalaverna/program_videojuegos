@@ -1,0 +1,110 @@
+@startuml DiagramaSistemas
+
+' ===============================================
+' Diagrama Entidad-Relación de Sistemas
+' Proyecto: FPS 1v1 Arena (Unity HDRP)
+' ===============================================
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam backgroundColor #FAFAFA
+skinparam component {
+    BackgroundColor #FFFFFF
+    BorderColor #444444
+    FontSize 13
+}
+skinparam package {
+    BackgroundColor #EEF2F5
+    BorderColor #888888
+}
+skinparam arrow {
+    Color #333333
+    FontSize 11
+}
+
+title Sistemas del juego y sus relaciones
+
+' --- Bootstrap / Inicialización ---
+package "Inicialización" {
+    [FPSBootstrap] as Bootstrap
+    [SceneSetup] as Setup
+}
+
+Bootstrap --> Setup : crea
+
+' --- Sistema Jugador ---
+package "Sistema Jugador" {
+    [PlayerMovement]
+    [MouseLook]
+    [PlayerHealth]
+}
+
+' --- Sistema de Armas ---
+package "Sistema de Armas" {
+    [WeaponManager]
+    [Weapon]
+    [WeaponData\n<<ScriptableObject>>] as WeaponData
+}
+
+WeaponManager --> Weapon : contiene array
+Weapon --> WeaponData : lee stats
+
+' --- Sistema de IA ---
+package "Sistema IA (Bot)" {
+    [EnemyBot]
+    [PlayerHealth\n(del bot)] as BotHealth
+}
+
+EnemyBot --> BotHealth : posee
+
+' --- Sistema de Partida ---
+package "Sistema de Partida" {
+    [GameManager]
+}
+
+' --- Sistema de UI ---
+package "Sistema UI" {
+    [GameHUD]
+}
+
+' --- Mapa ---
+package "Mapa" {
+    [Map / Spawn Points] as Map
+}
+
+' --- Conexiones desde Setup ---
+Setup ..> PlayerMovement : instancia
+Setup ..> MouseLook : instancia
+Setup ..> PlayerHealth : instancia
+Setup ..> WeaponManager : instancia
+Setup ..> EnemyBot : instancia
+Setup ..> GameManager : instancia
+Setup ..> GameHUD : instancia
+Setup ..> Map : genera
+
+' --- Combate: Weapon dispara raycast contra PlayerHealth ---
+Weapon -[#B22222]-> PlayerHealth : raycast hit\nTakeDamage()
+Weapon -[#B22222]-> BotHealth : raycast hit\nTakeDamage()
+EnemyBot -[#B22222]-> PlayerHealth : raycast hit\nTakeDamage()
+
+' --- Eventos de muerte hacia GameManager ---
+PlayerHealth -[#1565C0]-> GameManager : onDeath\nAddEnemyKill()
+BotHealth -[#1565C0]-> GameManager : onDeath\nAddPlayerKill()
+
+' --- Eventos hacia el HUD (UnityEvents, solo lectura) ---
+PlayerHealth -[#2E7D32]-> GameHUD : onHealthChanged
+WeaponManager -[#2E7D32]-> GameHUD : onAmmoChanged\nonWeaponChanged
+GameManager -[#2E7D32]-> GameHUD : onScoreChanged\nonGameMessage
+
+' --- Spawns ---
+GameManager --> Map : usa spawnPoints
+
+legend right
+| Color | Tipo de relación |
+| <#B22222>**rojo**</#B22222> | Daño / combate (raycast) |
+| <#1565C0>**azul**</#1565C0> | Eventos de muerte |
+| <#2E7D32>**verde**</#2E7D32> | Eventos hacia HUD (UnityEvents) |
+| **negro** | Composición / instanciación |
+endlegend
+
+@enduml

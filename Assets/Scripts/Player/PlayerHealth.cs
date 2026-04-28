@@ -5,21 +5,18 @@ public class PlayerHealth : MonoBehaviour
 {
     [Header("Health")]
     public int maxHealth = 100;
-    public int maxArmor = 100;
 
     [Header("Events")]
-    public UnityEvent<int, int> onHealthChanged; // health, armor
+    public UnityEvent<int, int> onHealthChanged; // health, (unused — kept for HUD compatibility)
     public UnityEvent onDeath;
 
     private int currentHealth;
-    private int currentArmor;
     private bool isDead;
 
     void Start()
     {
         currentHealth = maxHealth;
-        currentArmor = 0;
-        onHealthChanged?.Invoke(currentHealth, currentArmor);
+        onHealthChanged?.Invoke(currentHealth, 0);
     }
 
     public void TakeDamage(int damage, bool isHeadshot = false)
@@ -29,32 +26,9 @@ public class PlayerHealth : MonoBehaviour
         if (isHeadshot)
             damage = Mathf.RoundToInt(damage * 2.5f);
 
-        // Armor absorbs 60% of damage
-        if (currentArmor > 0)
-        {
-            int armorDamage = Mathf.RoundToInt(damage * 0.6f);
-            int healthDamage = damage - armorDamage;
-
-            if (armorDamage > currentArmor)
-            {
-                int overflow = armorDamage - currentArmor;
-                currentArmor = 0;
-                healthDamage += overflow;
-            }
-            else
-            {
-                currentArmor -= armorDamage;
-            }
-
-            currentHealth -= healthDamage;
-        }
-        else
-        {
-            currentHealth -= damage;
-        }
-
+        currentHealth -= damage;
         currentHealth = Mathf.Max(currentHealth, 0);
-        onHealthChanged?.Invoke(currentHealth, currentArmor);
+        onHealthChanged?.Invoke(currentHealth, 0);
 
         if (currentHealth <= 0)
             Die();
@@ -63,21 +37,14 @@ public class PlayerHealth : MonoBehaviour
     public void Heal(int amount)
     {
         currentHealth = Mathf.Min(currentHealth + amount, maxHealth);
-        onHealthChanged?.Invoke(currentHealth, currentArmor);
-    }
-
-    public void AddArmor(int amount)
-    {
-        currentArmor = Mathf.Min(currentArmor + amount, maxArmor);
-        onHealthChanged?.Invoke(currentHealth, currentArmor);
+        onHealthChanged?.Invoke(currentHealth, 0);
     }
 
     public void ResetHealth()
     {
         isDead = false;
         currentHealth = maxHealth;
-        currentArmor = 0;
-        onHealthChanged?.Invoke(currentHealth, currentArmor);
+        onHealthChanged?.Invoke(currentHealth, 0);
     }
 
     private void Die()
@@ -87,6 +54,5 @@ public class PlayerHealth : MonoBehaviour
     }
 
     public int Health => currentHealth;
-    public int Armor => currentArmor;
     public bool IsDead => isDead;
 }
