@@ -15,6 +15,7 @@ public class SceneSetup : MonoBehaviour
     public bool buildPlayer = true;
     public bool buildBot = true;
     public bool buildGameManager = true;
+    public bool autoBuildOnAwake = false;
 
     private Material wallMat;
     private Material floorMat;
@@ -22,8 +23,18 @@ public class SceneSetup : MonoBehaviour
     private Material redMat;
     private Material blueMat;
 
+    private bool alreadyBuilt;
+
     void Awake()
     {
+        if (autoBuildOnAwake) BuildScene();
+    }
+
+    public void BuildScene()
+    {
+        if (alreadyBuilt) return;
+        alreadyBuilt = true;
+
         CreateMaterials();
 
         if (buildMap) BuildMap();
@@ -35,11 +46,10 @@ public class SceneSetup : MonoBehaviour
 
         if (buildGameManager) BuildGameManager(playerT);
 
-        // Bake NavMesh at runtime (requires NavMeshSurface component)
         NavMeshSurface surface = FindAnyObjectByType<NavMeshSurface>();
         if (surface) surface.BuildNavMesh();
 
-        Debug.Log("[SceneSetup] Scene built successfully! Press Play to test.");
+        Debug.Log("[SceneSetup] Scene built successfully!");
     }
 
     private void CreateMaterials()
