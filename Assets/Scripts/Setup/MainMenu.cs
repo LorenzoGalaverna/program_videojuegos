@@ -91,7 +91,7 @@ public class MainMenu : MonoBehaviour
         float cy = Screen.height / 2f;
 
         // Title
-        GUI.Label(new Rect(0, cy - 250, Screen.width, 80), "DUSTBOWL 1V1", titleStyle);
+        GUI.Label(new Rect(0, cy - 250, Screen.width, 80), "DUSTY", titleStyle);
         GUI.Label(new Rect(0, cy - 180, Screen.width, 30), "Selecciona un modo de juego", subtitleStyle);
 
         // Buttons

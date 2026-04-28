@@ -9,7 +9,7 @@
 
 ## 1. Nombre del juego
 
-**[NOMBRE DEL JUEGO]** — *(ej: DeadLock 1v1)*
+**Dusty**
 
 ## 2. Objetivo principal del juego
 
