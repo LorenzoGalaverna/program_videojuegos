@@ -12,6 +12,8 @@ public class FPSBootstrap : MonoBehaviour
 
     void Awake()
     {
+        // Disable VSync so targetFrameRate actually applies
+        QualitySettings.vSyncCount = 0;
         Application.targetFrameRate = targetFrameRate;
 
         // Add SceneSetup but DO NOT auto-build (the menu will trigger it)

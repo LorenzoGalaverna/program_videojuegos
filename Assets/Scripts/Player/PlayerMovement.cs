@@ -6,8 +6,8 @@ public class PlayerMovement : MonoBehaviour
     public float walkSpeed = 4.5f;
     public float runSpeed = 7f;
     public float crouchSpeed = 2.5f;
-    public float jumpForce = 5f;
-    public float gravity = -15f;
+    public float jumpForce = 1.4f;
+    public float gravity = -20f;
 
     [Header("Ground Check")]
     public float groundCheckRadius = 0.3f;
