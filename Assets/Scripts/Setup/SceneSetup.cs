@@ -17,6 +17,18 @@ public class SceneSetup : MonoBehaviour
     public bool buildGameManager = true;
     public bool autoBuildOnAwake = false;
 
+    [Header("Custom Prefabs (opcional - dejá vacío para usar los procedurales)")]
+    public GameObject pistolPrefab;
+    public GameObject riflePrefab;
+    public GameObject sniperPrefab;
+    public GameObject botBodyPrefab;
+    [Tooltip("Escala extra para aplicar al prefab del arma")]
+    public float weaponPrefabScale = 1f;
+    [Tooltip("Offset extra para posicionar el prefab del arma (X, Y, Z)")]
+    public Vector3 weaponPrefabOffset = Vector3.zero;
+    [Tooltip("Rotación extra para el prefab del arma (X, Y, Z) en grados")]
+    public Vector3 weaponPrefabRotation = Vector3.zero;
+
     private Material wallMat;
     private Material floorMat;
     private Material crateMat;
@@ -264,10 +276,29 @@ public class SceneSetup : MonoBehaviour
         data.weaponName = name;
         data.weaponType = type;
 
+        // If a custom prefab is assigned, use it instead of the procedural model
+        GameObject prefabToUse = null;
+        switch (type)
+        {
+            case WeaponType.Pistol: prefabToUse = pistolPrefab; break;
+            case WeaponType.Rifle:  prefabToUse = riflePrefab; break;
+            case WeaponType.Sniper: prefabToUse = sniperPrefab; break;
+        }
+
+        if (prefabToUse != null)
+        {
+            GameObject inst = Instantiate(prefabToUse, visual.transform);
+            inst.transform.localPosition = weaponPrefabOffset;
+            inst.transform.localRotation = Quaternion.Euler(weaponPrefabRotation);
+            inst.transform.localScale = Vector3.one * weaponPrefabScale;
+            // Strip any colliders from the visual prefab so they don't block raycasts
+            foreach (var c in inst.GetComponentsInChildren<Collider>()) Destroy(c);
+        }
+
         switch (type)
         {
             case WeaponType.Pistol:
-                BuildPistolModel(visual.transform, gunMat, accentMat, 1f);
+                if (prefabToUse == null) BuildPistolModel(visual.transform, gunMat, accentMat, 1f);
                 data.damage = 30;
                 data.fireRate = 0.2f;
                 data.magazineSize = 12;
@@ -279,7 +310,7 @@ public class SceneSetup : MonoBehaviour
                 break;
 
             case WeaponType.Rifle:
-                BuildRifleModel(visual.transform, gunMat, accentMat, 1f);
+                if (prefabToUse == null) BuildRifleModel(visual.transform, gunMat, accentMat, 1f);
                 data.damage = 25;
                 data.fireRate = 0.1f;
                 data.magazineSize = 30;
@@ -294,7 +325,7 @@ public class SceneSetup : MonoBehaviour
                 break;
 
             case WeaponType.Sniper:
-                BuildSniperModel(visual.transform, gunMat, accentMat, 1f);
+                if (prefabToUse == null) BuildSniperModel(visual.transform, gunMat, accentMat, 1f);
                 data.damage = 80;
                 data.fireRate = 1.5f;
                 data.magazineSize = 5;
