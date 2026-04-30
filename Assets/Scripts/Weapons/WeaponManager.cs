@@ -17,8 +17,8 @@ public class WeaponManager : MonoBehaviour
     private bool isAiming;
 
     [Header("Events")]
-    public UnityEvent<int, int> onAmmoChanged;
-    public UnityEvent<string> onWeaponChanged;
+    public UnityEvent<int, int> onAmmoChanged = new UnityEvent<int, int>();
+    public UnityEvent<string> onWeaponChanged = new UnityEvent<string>();
 
     private int currentWeaponIndex = -1;
     private Weapon currentWeapon;

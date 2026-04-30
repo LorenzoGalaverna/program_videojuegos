@@ -11,7 +11,7 @@ public class Weapon : MonoBehaviour
     public AudioSource audioSource;
 
     [Header("Events")]
-    public UnityEvent<int, int> onAmmoChanged; // current, reserve
+    public UnityEvent<int, int> onAmmoChanged = new UnityEvent<int, int>();
 
     private int currentMagazine;
     private int currentReserve;

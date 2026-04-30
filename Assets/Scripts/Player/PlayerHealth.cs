@@ -7,8 +7,8 @@ public class PlayerHealth : MonoBehaviour
     public int maxHealth = 100;
 
     [Header("Events")]
-    public UnityEvent<int, int> onHealthChanged; // health, (unused — kept for HUD compatibility)
-    public UnityEvent onDeath;
+    public UnityEvent<int, int> onHealthChanged = new UnityEvent<int, int>();
+    public UnityEvent onDeath = new UnityEvent();
 
     private int currentHealth;
     private bool isDead;

@@ -1,49 +1,46 @@
 using UnityEngine;
+using UnityEngine.AI;
 
 public class EnemyBot : MonoBehaviour
 {
-    [Header("Bot Settings")]
-    public float detectionRange = 40f;
+    [Header("Detección")]
+    public float detectionRange = 30f;
+    public float attackRange = 18f;
     public float fieldOfView = 120f;
     public float reactionTime = 0.3f;
-    public float accuracy = 0.65f;
 
-    [Header("Combat")]
-    public int damage = 18;
-    public float fireRate = 0.2f;
-    public int burstLength = 4;
+    [Header("Combate")]
+    public int damage = 15;
+    public float fireRate = 0.4f;
+    public float aimSmoothing = 6f;
+    public float accuracy = 0.7f;
 
-    [Header("Movement")]
-    public float moveSpeed = 4f;
+    [Header("Patrulla")]
     public float patrolRadius = 12f;
+    public float patrolWaitTime = 2f;
 
-    [Header("References")]
+    [Header("Referencias")]
     public Transform eyePoint;
 
-    private CharacterController cc;
+    private NavMeshAgent agent;
     private PlayerHealth health;
     private Transform player;
     private PlayerHealth playerHealth;
 
-    private enum BotState { Patrol, Chase, Attack, Dead }
-    private BotState state = BotState.Patrol;
+    public enum State { Patrol, Chase, Attack, Dead }
+    private State state = State.Patrol;
 
     private float nextFireTime;
-    private float reactionTimer;
-    private bool playerDetected;
-    private Vector3 patrolTarget;
     private float patrolWaitTimer;
-    private int burstCount;
-    private float gravity = -9.8f;
-    private float verticalVelocity;
+    private float reactionTimer;
+    private Vector3 lastKnownPlayerPos;
 
     void Start()
     {
-        cc = GetComponent<CharacterController>();
+        agent = GetComponent<NavMeshAgent>();
         health = GetComponent<PlayerHealth>();
 
-        if (health)
-            health.onDeath.AddListener(OnDeath);
+        if (health) health.onDeath.AddListener(OnDeath);
 
         GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
         if (playerObj)
@@ -52,188 +49,136 @@ public class EnemyBot : MonoBehaviour
             playerHealth = playerObj.GetComponent<PlayerHealth>();
         }
 
-        patrolTarget = transform.position;
+        if (!agent.isOnNavMesh)
+            Debug.LogError("[Bot] NavMeshAgent NOT on NavMesh! Bake the NavMesh first.");
+        else
+            Debug.Log($"[Bot] Ready. State: {state}. Position: {transform.position}");
+
         SetNewPatrolTarget();
-
-        // Start in chase mode so the bot actively goes toward the player
-        if (player != null) state = BotState.Chase;
-
-        Debug.Log($"[Bot] Initialized at {transform.position} | Player: {(player != null ? player.position.ToString() : "NOT FOUND")}");
     }
 
     void Update()
     {
-        if (state == BotState.Dead || player == null) return;
+        if (state == State.Dead || player == null || !agent.isOnNavMesh) return;
 
-        CheckForPlayer();
+        UpdateStateTransitions();
+        ExecuteCurrentState();
+    }
 
+    private void UpdateStateTransitions()
+    {
+        if (playerHealth != null && playerHealth.IsDead)
+        {
+            ChangeState(State.Patrol);
+            return;
+        }
+
+        bool canSee = CanSeePlayer();
+        float dist = Vector3.Distance(transform.position, player.position);
+
+        if (canSee)
+        {
+            lastKnownPlayerPos = player.position;
+
+            if (dist <= attackRange)
+                ChangeState(State.Attack);
+            else if (dist <= detectionRange)
+                ChangeState(State.Chase);
+        }
+        else
+        {
+            // Lost sight: chase to last known position, then back to patrol
+            if (state == State.Attack || state == State.Chase)
+            {
+                if (Vector3.Distance(transform.position, lastKnownPlayerPos) < 2f)
+                    ChangeState(State.Patrol);
+                else
+                    ChangeState(State.Chase);
+            }
+        }
+    }
+
+    private void ExecuteCurrentState()
+    {
         switch (state)
         {
-            case BotState.Patrol: UpdatePatrol(); break;
-            case BotState.Chase: UpdateChase(); break;
-            case BotState.Attack: UpdateAttack(); break;
+            case State.Patrol: DoPatrol(); break;
+            case State.Chase: DoChase(); break;
+            case State.Attack: DoAttack(); break;
         }
     }
 
-    private void CheckForPlayer()
+    private void ChangeState(State newState)
     {
-        if (playerHealth && playerHealth.IsDead)
+        if (state == newState) return;
+        state = newState;
+
+        if (newState == State.Attack)
         {
-            playerDetected = false;
-            if (state != BotState.Patrol) state = BotState.Patrol;
-            return;
+            agent.isStopped = true;
+            reactionTimer = reactionTime;
         }
-
-        float dist = Vector3.Distance(transform.position, player.position);
-
-        // Always detect if very close
-        if (dist < 8f)
+        else
         {
-            playerDetected = true;
-            reactionTimer = 0;
-            state = BotState.Attack;
-            return;
-        }
-
-        if (dist > detectionRange)
-        {
-            if (playerDetected) { playerDetected = false; state = BotState.Chase; }
-            return;
-        }
-
-        Vector3 dirToPlayer = (player.position - transform.position).normalized;
-        float angle = Vector3.Angle(transform.forward, dirToPlayer);
-
-        if (angle > fieldOfView / 2f)
-        {
-            if (state == BotState.Attack) state = BotState.Chase;
-            return;
-        }
-
-        // Line of sight
-        Transform eye = eyePoint ? eyePoint : transform;
-        Vector3 eyePos = eye.position;
-        Vector3 targetPos = player.position + Vector3.up * 1.5f;
-
-        if (Physics.Raycast(eyePos, (targetPos - eyePos).normalized, out RaycastHit hit, detectionRange))
-        {
-            bool hitPlayer = hit.collider.CompareTag("Player") ||
-                             hit.collider.GetComponentInParent<PlayerHealth>() == playerHealth;
-            if (hitPlayer)
-            {
-                if (!playerDetected)
-                {
-                    playerDetected = true;
-                    reactionTimer = reactionTime;
-                }
-                reactionTimer -= Time.deltaTime;
-                if (reactionTimer <= 0) state = BotState.Attack;
-            }
-            else
-            {
-                if (state == BotState.Attack) state = BotState.Chase;
-            }
+            agent.isStopped = false;
         }
     }
 
-    private void UpdatePatrol()
+    // ─── PATROL ────────────────────────────────────────
+    private void DoPatrol()
     {
-        float dist = Vector3.Distance(
-            new Vector3(transform.position.x, 0, transform.position.z),
-            new Vector3(patrolTarget.x, 0, patrolTarget.z));
-
-        if (dist < 2f)
+        if (agent.remainingDistance < 1f && !agent.pathPending)
         {
             patrolWaitTimer -= Time.deltaTime;
-            if (patrolWaitTimer <= 0) SetNewPatrolTarget();
-        }
-        else
-        {
-            MoveToward(patrolTarget, true);
+            if (patrolWaitTimer <= 0)
+                SetNewPatrolTarget();
         }
     }
 
-    private void UpdateChase()
+    private void SetNewPatrolTarget()
     {
-        MoveToward(player.position, true);
+        Vector3 randomDir = Random.insideUnitSphere * patrolRadius;
+        randomDir.y = 0;
+        Vector3 target = transform.position + randomDir;
 
-        if (Vector3.Distance(transform.position, player.position) < detectionRange * 0.6f)
+        if (NavMesh.SamplePosition(target, out NavMeshHit hit, patrolRadius, NavMesh.AllAreas))
         {
-            // Re-check line of sight
-            Transform eye = eyePoint ? eyePoint : transform;
-            Vector3 dir = (player.position + Vector3.up * 1.5f - eye.position).normalized;
-            if (Physics.Raycast(eye.position, dir, out RaycastHit hit, detectionRange))
-            {
-                if (hit.collider.CompareTag("Player") || hit.collider.GetComponentInParent<PlayerHealth>() == playerHealth)
-                    state = BotState.Attack;
-            }
+            agent.SetDestination(hit.position);
         }
+
+        patrolWaitTimer = patrolWaitTime;
     }
 
-    private void UpdateAttack()
+    // ─── CHASE ────────────────────────────────────────
+    private void DoChase()
     {
-        // Look at player
-        Vector3 lookDir = player.position - transform.position;
+        // Move toward last known position of the player
+        agent.SetDestination(lastKnownPlayerPos);
+    }
+
+    // ─── ATTACK ────────────────────────────────────────
+    private void DoAttack()
+    {
+        // Aim at player
+        Vector3 aimTarget = player.position + Vector3.up * 1.5f;
+        Vector3 lookDir = aimTarget - transform.position;
         lookDir.y = 0;
-        if (lookDir.sqrMagnitude > 0.1f)
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), 10f * Time.deltaTime);
+        if (lookDir.sqrMagnitude > 0.01f)
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), aimSmoothing * Time.deltaTime);
 
-        // Strafe and distance management
-        float dist = Vector3.Distance(transform.position, player.position);
-
-        if (dist < 5f)
+        // Reaction delay before first shot
+        if (reactionTimer > 0)
         {
-            // Back up
-            Vector3 away = (transform.position - player.position).normalized;
-            MoveToward(transform.position + away * 5f, false);
-        }
-        else if (dist > 22f)
-        {
-            MoveToward(player.position, false);
-        }
-        else
-        {
-            // Strafe sideways
-            Vector3 strafe = Vector3.Cross(Vector3.up, (player.position - transform.position).normalized);
-            float dir = Mathf.Sin(Time.time * 1.5f) > 0 ? 1f : -1f;
-            MoveToward(transform.position + strafe * dir * 4f, false);
+            reactionTimer -= Time.deltaTime;
+            return;
         }
 
-        // Shoot
+        // Fire at fire rate
         if (Time.time >= nextFireTime)
         {
             Shoot();
-            burstCount++;
             nextFireTime = Time.time + fireRate;
-
-            if (burstCount >= burstLength)
-            {
-                burstCount = 0;
-                nextFireTime = Time.time + fireRate * 4f; // pause between bursts
-            }
         }
-    }
-
-    private void MoveToward(Vector3 target, bool faceDirection)
-    {
-        Vector3 dir = target - transform.position;
-        dir.y = 0;
-        if (dir.sqrMagnitude < 0.5f) return;
-
-        dir = dir.normalized;
-
-        // Gravity
-        if (cc.isGrounded)
-            verticalVelocity = -1f;
-        else
-            verticalVelocity += gravity * Time.deltaTime;
-
-        Vector3 move = dir * moveSpeed + Vector3.up * verticalVelocity;
-        cc.Move(move * Time.deltaTime);
-
-        // Face direction
-        if (faceDirection && dir.sqrMagnitude > 0.01f)
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), 5f * Time.deltaTime);
     }
 
     private void Shoot()
@@ -245,14 +190,14 @@ public class EnemyBot : MonoBehaviour
         Vector3 aimDir = (targetPos - eye.position).normalized;
 
         // Inaccuracy
-        float missAmount = (1f - accuracy) * 0.12f;
+        float spread = (1f - accuracy) * 0.1f;
         aimDir += new Vector3(
-            Random.Range(-missAmount, missAmount),
-            Random.Range(-missAmount, missAmount),
-            Random.Range(-missAmount, missAmount)
+            Random.Range(-spread, spread),
+            Random.Range(-spread, spread),
+            Random.Range(-spread, spread)
         );
 
-        if (Physics.Raycast(eye.position, aimDir.normalized, out RaycastHit hit, detectionRange))
+        if (Physics.Raycast(eye.position, aimDir.normalized, out RaycastHit hit, attackRange + 5f))
         {
             PlayerHealth ph = hit.collider.GetComponentInParent<PlayerHealth>();
             if (ph != null && ph == playerHealth)
@@ -263,40 +208,60 @@ public class EnemyBot : MonoBehaviour
         }
     }
 
-    private void SetNewPatrolTarget()
+    // ─── PERCEPTION ────────────────────────────────────
+    private bool CanSeePlayer()
     {
-        Vector3 randomOffset = new Vector3(
-            Random.Range(-patrolRadius, patrolRadius),
-            0,
-            Random.Range(-patrolRadius, patrolRadius)
-        );
+        if (player == null) return false;
 
-        patrolTarget = transform.position + randomOffset;
-        // Clamp to map bounds
-        patrolTarget.x = Mathf.Clamp(patrolTarget.x, -22f, 22f);
-        patrolTarget.z = Mathf.Clamp(patrolTarget.z, -22f, 22f);
+        float dist = Vector3.Distance(transform.position, player.position);
+        if (dist > detectionRange) return false;
 
-        patrolWaitTimer = Random.Range(1f, 3f);
+        Vector3 dirToPlayer = (player.position - transform.position).normalized;
+        float angle = Vector3.Angle(transform.forward, dirToPlayer);
+        // Always allow detection at very close range, regardless of FOV
+        if (angle > fieldOfView / 2f && dist > 4f) return false;
+
+        Transform eye = eyePoint ? eyePoint : transform;
+        Vector3 targetPos = player.position + Vector3.up * 1.5f;
+        Vector3 ray = (targetPos - eye.position);
+
+        if (Physics.Raycast(eye.position, ray.normalized, out RaycastHit hit, ray.magnitude + 0.5f))
+        {
+            return hit.collider.CompareTag("Player") ||
+                   hit.collider.GetComponentInParent<PlayerHealth>() == playerHealth;
+        }
+        return false;
     }
 
+    // ─── DEATH / RESPAWN ───────────────────────────────
     private void OnDeath()
     {
-        state = BotState.Dead;
+        ChangeState(State.Dead);
+        if (agent.isOnNavMesh) agent.isStopped = true;
 
-        if (GameManager.Instance)
-            GameManager.Instance.AddPlayerKill();
+        if (GameManager.Instance) GameManager.Instance.AddPlayerKill();
 
         Invoke(nameof(Respawn), 3f);
     }
 
     private void Respawn()
     {
-        state = BotState.Patrol;
         health.ResetHealth();
+        if (GameManager.Instance) GameManager.Instance.RespawnPlayer(gameObject, 1);
 
-        if (GameManager.Instance)
-            GameManager.Instance.RespawnPlayer(gameObject, 1);
-
+        if (agent.isOnNavMesh) agent.isStopped = false;
+        ChangeState(State.Patrol);
         SetNewPatrolTarget();
     }
+
+    // ─── DEBUG ────────────────────────────────────────
+    void OnDrawGizmos()
+    {
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, detectionRange);
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, attackRange);
+    }
+
+    public State CurrentState => state;
 }

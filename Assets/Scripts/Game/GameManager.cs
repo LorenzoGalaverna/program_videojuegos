@@ -15,9 +15,9 @@ public class GameManager : MonoBehaviour
     public Transform[] spawnPointsTeamB;
 
     [Header("Events")]
-    public UnityEvent<int, int> onScoreChanged; // playerScore, enemyScore
-    public UnityEvent<string> onGameMessage;
-    public UnityEvent onGameOver;
+    public UnityEvent<int, int> onScoreChanged = new UnityEvent<int, int>();
+    public UnityEvent<string> onGameMessage = new UnityEvent<string>();
+    public UnityEvent onGameOver = new UnityEvent();
 
     private int playerScore;
     private int enemyScore;
@@ -29,11 +29,12 @@ public class GameManager : MonoBehaviour
         if (Instance == null)
             Instance = this;
         else
+        {
             Destroy(gameObject);
-    }
+            return;
+        }
 
-    void Start()
-    {
+        // Initialize immediately so HUD reads correct values from frame 1
         StartGame();
     }
 

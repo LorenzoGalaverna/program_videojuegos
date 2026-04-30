@@ -37,17 +37,26 @@ public class SceneSetup : MonoBehaviour
 
         CreateMaterials();
 
+        // 1. Build map (geometry must exist before NavMesh bake)
         if (buildMap) BuildMap();
 
+        // 2. Bake NavMesh BEFORE creating any NavMeshAgent
+        NavMeshSurface surface = FindAnyObjectByType<NavMeshSurface>();
+        if (surface)
+        {
+            surface.BuildNavMesh();
+            Debug.Log("[SceneSetup] NavMesh baked.");
+        }
+        else
+        {
+            Debug.LogWarning("[SceneSetup] No NavMeshSurface found. Bot will not pathfind.");
+        }
+
+        // 3. Build player, bot and game manager
         Transform playerT = null;
         if (buildPlayer) playerT = BuildPlayer();
-
         if (buildBot) BuildBot();
-
         if (buildGameManager) BuildGameManager(playerT);
-
-        NavMeshSurface surface = FindAnyObjectByType<NavMeshSurface>();
-        if (surface) surface.BuildNavMesh();
 
         Debug.Log("[SceneSetup] Scene built successfully!");
     }
@@ -333,66 +342,71 @@ public class SceneSetup : MonoBehaviour
     private void BuildBot()
     {
         GameObject bot = new GameObject("Enemy_Bot");
-        // Spawn closer to center so player can find it
-        bot.transform.position = new Vector3(15, 1.5f, 15);
 
-        // Bright emissive material for visibility
+        // Try to place the bot on the NavMesh near the player
+        Vector3 desired = new Vector3(-8, 1f, -8);
+        if (NavMesh.SamplePosition(desired, out NavMeshHit navHit, 10f, NavMesh.AllAreas))
+            bot.transform.position = navHit.position;
+        else
+            bot.transform.position = desired;
+
+        // Bright red emissive material for visibility
         Material botMat = new Material(Shader.Find("HDRP/Lit"));
-        botMat.SetColor("_BaseColor", new Color(1f, 0.15f, 0.15f));
+        botMat.SetColor("_BaseColor", new Color(1f, 0.1f, 0.1f));
         if (botMat.HasProperty("_EmissiveColor"))
         {
-            botMat.SetColor("_EmissiveColor", new Color(1.5f, 0f, 0f));
+            botMat.SetColor("_EmissiveColor", new Color(2f, 0f, 0f));
             botMat.EnableKeyword("_EMISSION");
         }
 
-        // Capsule body (no collider — CharacterController handles physics)
+        // Body (visual only)
         GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         body.name = "Body";
         body.transform.parent = bot.transform;
         body.transform.localPosition = new Vector3(0, 1f, 0);
+        body.transform.localScale = new Vector3(1.2f, 1f, 1.2f);
         Destroy(body.GetComponent<Collider>());
         body.GetComponent<Renderer>().material = botMat;
 
-        // Head (with collider for headshot detection)
+        // Head (with collider for headshots)
         GameObject head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         head.name = "Head";
         head.tag = "Head";
         head.transform.parent = bot.transform;
         head.transform.localPosition = new Vector3(0, 2.1f, 0);
-        head.transform.localScale = new Vector3(0.45f, 0.45f, 0.45f);
+        head.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
         head.GetComponent<Renderer>().material = botMat;
 
-        // Body hitbox (separate from visual so headshot tag works correctly)
+        // Body hitbox (separate so headshot tag works on head only)
         GameObject hitbox = new GameObject("BodyHitbox");
         hitbox.transform.parent = bot.transform;
         hitbox.transform.localPosition = new Vector3(0, 1f, 0);
         CapsuleCollider hitCol = hitbox.AddComponent<CapsuleCollider>();
-        hitCol.height = 1.6f;
-        hitCol.radius = 0.4f;
-        hitCol.isTrigger = false;
+        hitCol.height = 1.8f;
+        hitCol.radius = 0.5f;
 
-        // Eye point
+        // Eye point (used for line-of-sight raycasts)
         GameObject eye = new GameObject("EyePoint");
         eye.transform.parent = bot.transform;
         eye.transform.localPosition = new Vector3(0, 2f, 0.3f);
 
-        // CharacterController for movement
-        CharacterController botCC = bot.AddComponent<CharacterController>();
-        botCC.height = 2f;
-        botCC.radius = 0.4f;
-        botCC.center = new Vector3(0, 1f, 0);
+        // NavMeshAgent — handles movement and pathfinding
+        NavMeshAgent agent = bot.AddComponent<NavMeshAgent>();
+        agent.speed = 4.5f;
+        agent.angularSpeed = 250f;
+        agent.acceleration = 12f;
+        agent.stoppingDistance = 0.5f;
+        agent.radius = 0.5f;
+        agent.height = 2f;
 
         // Health
         PlayerHealth health = bot.AddComponent<PlayerHealth>();
 
-        // Bot AI — start aggressive so it always seeks the player
+        // Bot AI
         EnemyBot botAI = bot.AddComponent<EnemyBot>();
         botAI.eyePoint = eye.transform;
-        botAI.accuracy = 0.55f;
-        botAI.reactionTime = 0.5f;
-        botAI.detectionRange = 80f; // larger so it spots player anywhere on map
 
-        Debug.Log($"[SceneSetup] Bot spawned at {bot.transform.position}");
+        Debug.Log($"[SceneSetup] Bot spawned at {bot.transform.position} | onNavMesh={agent.isOnNavMesh}");
     }
 
     // ──────────────────────────────────────────────

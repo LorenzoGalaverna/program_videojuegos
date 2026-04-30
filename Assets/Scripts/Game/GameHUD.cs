@@ -40,6 +40,8 @@ public class GameHUD : MonoBehaviour
     // Hit marker
     private float hitMarkerTimer;
 
+    private bool gmListenersAttached;
+
     void Start()
     {
         if (playerHealth)
@@ -51,17 +53,24 @@ public class GameHUD : MonoBehaviour
             weaponManager.onAmmoChanged.AddListener((m, r) => { displayMag = m; displayReserve = r; });
             weaponManager.onWeaponChanged.AddListener(n => weaponName = n);
         }
-        if (GameManager.Instance)
-        {
-            GameManager.Instance.onScoreChanged.AddListener((p, e) => { playerScore = p; enemyScore = e; });
-            GameManager.Instance.onGameMessage.AddListener(ShowMessage);
-        }
+        TryAttachGameManagerListeners();
+    }
+
+    private void TryAttachGameManagerListeners()
+    {
+        if (gmListenersAttached) return;
+        if (GameManager.Instance == null) return;
+
+        GameManager.Instance.onScoreChanged.AddListener((p, e) => { playerScore = p; enemyScore = e; });
+        GameManager.Instance.onGameMessage.AddListener(ShowMessage);
+        gmListenersAttached = true;
     }
 
     void Update()
     {
         if (messageTimer > 0) messageTimer -= Time.deltaTime;
         if (hitMarkerTimer > 0) hitMarkerTimer -= Time.deltaTime;
+        TryAttachGameManagerListeners();
         if (GameManager.Instance) gameTime = GameManager.Instance.CurrentTime;
     }
 
