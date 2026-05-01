@@ -17,17 +17,6 @@ public class SceneSetup : MonoBehaviour
     public bool buildGameManager = true;
     public bool autoBuildOnAwake = false;
 
-    [Header("Custom Prefabs (opcional - dejá vacío para usar los procedurales)")]
-    public GameObject pistolPrefab;
-    public GameObject riflePrefab;
-    public GameObject sniperPrefab;
-    public GameObject botBodyPrefab;
-    [Tooltip("Escala extra para aplicar al prefab del arma")]
-    public float weaponPrefabScale = 1f;
-    [Tooltip("Offset extra para posicionar el prefab del arma (X, Y, Z)")]
-    public Vector3 weaponPrefabOffset = Vector3.zero;
-    [Tooltip("Rotación extra para el prefab del arma (X, Y, Z) en grados")]
-    public Vector3 weaponPrefabRotation = Vector3.zero;
 
     private Material wallMat;
     private Material floorMat;
@@ -192,17 +181,28 @@ public class SceneSetup : MonoBehaviour
         Camera existingCam = Camera.main;
         if (existingCam) Destroy(existingCam.gameObject);
 
+        // Destroy ANY camera that might be in the scene (including ones added by asset packs)
+        foreach (var existingCamera in FindObjectsByType<Camera>(FindObjectsSortMode.None))
+            Destroy(existingCamera.gameObject);
+
         GameObject camObj = new GameObject("PlayerCamera");
         camObj.tag = "MainCamera";
         camObj.transform.parent = camHolder.transform;
         camObj.transform.localPosition = Vector3.zero;
+        camObj.layer = 0; // Default layer
         Camera cam = camObj.AddComponent<Camera>();
         cam.fieldOfView = 70;
-        cam.nearClipPlane = 0.01f;
+        cam.nearClipPlane = 0.05f;
+        cam.farClipPlane = 1000f;
+        cam.cullingMask = ~0;
+        cam.clearFlags = CameraClearFlags.Skybox;
+        cam.depth = 0;
         camObj.AddComponent<AudioListener>();
 
         // HDRP requires this component on cameras
         var hdCamData = camObj.AddComponent<HDAdditionalCameraData>();
+        hdCamData.volumeLayerMask = ~0;
+        hdCamData.clearColorMode = HDAdditionalCameraData.ClearColorMode.Sky;
 
         // Mouse Look
         MouseLook mouseLook = camHolder.AddComponent<MouseLook>();
@@ -276,29 +276,10 @@ public class SceneSetup : MonoBehaviour
         data.weaponName = name;
         data.weaponType = type;
 
-        // If a custom prefab is assigned, use it instead of the procedural model
-        GameObject prefabToUse = null;
-        switch (type)
-        {
-            case WeaponType.Pistol: prefabToUse = pistolPrefab; break;
-            case WeaponType.Rifle:  prefabToUse = riflePrefab; break;
-            case WeaponType.Sniper: prefabToUse = sniperPrefab; break;
-        }
-
-        if (prefabToUse != null)
-        {
-            GameObject inst = Instantiate(prefabToUse, visual.transform);
-            inst.transform.localPosition = weaponPrefabOffset;
-            inst.transform.localRotation = Quaternion.Euler(weaponPrefabRotation);
-            inst.transform.localScale = Vector3.one * weaponPrefabScale;
-            // Strip any colliders from the visual prefab so they don't block raycasts
-            foreach (var c in inst.GetComponentsInChildren<Collider>()) Destroy(c);
-        }
-
         switch (type)
         {
             case WeaponType.Pistol:
-                if (prefabToUse == null) BuildPistolModel(visual.transform, gunMat, accentMat, 1f);
+                BuildPistolModel(visual.transform, gunMat, accentMat, 1f);
                 data.damage = 30;
                 data.fireRate = 0.2f;
                 data.magazineSize = 12;
@@ -310,7 +291,7 @@ public class SceneSetup : MonoBehaviour
                 break;
 
             case WeaponType.Rifle:
-                if (prefabToUse == null) BuildRifleModel(visual.transform, gunMat, accentMat, 1f);
+                BuildRifleModel(visual.transform, gunMat, accentMat, 1f);
                 data.damage = 25;
                 data.fireRate = 0.1f;
                 data.magazineSize = 30;
@@ -325,7 +306,7 @@ public class SceneSetup : MonoBehaviour
                 break;
 
             case WeaponType.Sniper:
-                if (prefabToUse == null) BuildSniperModel(visual.transform, gunMat, accentMat, 1f);
+                BuildSniperModel(visual.transform, gunMat, accentMat, 1f);
                 data.damage = 80;
                 data.fireRate = 1.5f;
                 data.magazineSize = 5;

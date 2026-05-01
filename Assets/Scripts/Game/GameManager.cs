@@ -118,6 +118,10 @@ public class GameManager : MonoBehaviour
 
         PlayerHealth health = player.GetComponent<PlayerHealth>();
         if (health) health.ResetHealth();
+
+        // Reset camera vertical look (so the player doesn't respawn looking at the sky)
+        MouseLook ml = player.GetComponentInChildren<MouseLook>();
+        if (ml) ml.ResetLook();
     }
 
     public float CurrentTime => currentTime;

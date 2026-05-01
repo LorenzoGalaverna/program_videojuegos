@@ -43,4 +43,12 @@ public class MouseLook : MonoBehaviour
     {
         sensitivity = newSens;
     }
+
+    public void ResetLook()
+    {
+        xRotation = 0f;
+        currentLookDelta = Vector2.zero;
+        smoothLookVelocity = Vector2.zero;
+        transform.localRotation = Quaternion.identity;
+    }
 }

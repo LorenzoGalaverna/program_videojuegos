@@ -8,20 +8,6 @@ public class FPSBootstrap : MonoBehaviour
     public int targetFrameRate = 120;
     public bool showDebugInfo = true;
 
-    [Header("Custom Prefabs (opcional - dejá vacío para usar los procedurales)")]
-    public GameObject pistolPrefab;
-    public GameObject riflePrefab;
-    public GameObject sniperPrefab;
-    public GameObject botBodyPrefab;
-
-    [Header("Ajuste de prefabs de armas")]
-    [Tooltip("Escala extra para el prefab del arma")]
-    public float weaponPrefabScale = 1f;
-    [Tooltip("Offset (X, Y, Z) para reposicionar el prefab del arma")]
-    public Vector3 weaponPrefabOffset = Vector3.zero;
-    [Tooltip("Rotación (X, Y, Z) en grados para el prefab del arma")]
-    public Vector3 weaponPrefabRotation = Vector3.zero;
-
     private MainMenu menu;
 
     void Awake()
@@ -37,15 +23,6 @@ public class FPSBootstrap : MonoBehaviour
             setup = gameObject.AddComponent<SceneSetup>();
             setup.autoBuildOnAwake = false;
         }
-
-        // Forward custom prefabs to SceneSetup
-        setup.pistolPrefab = pistolPrefab;
-        setup.riflePrefab = riflePrefab;
-        setup.sniperPrefab = sniperPrefab;
-        setup.botBodyPrefab = botBodyPrefab;
-        setup.weaponPrefabScale = weaponPrefabScale;
-        setup.weaponPrefabOffset = weaponPrefabOffset;
-        setup.weaponPrefabRotation = weaponPrefabRotation;
 
         // Add main menu
         menu = gameObject.AddComponent<MainMenu>();
