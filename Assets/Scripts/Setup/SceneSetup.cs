@@ -27,6 +27,7 @@ public class SceneSetup : MonoBehaviour
     [HideInInspector] public float botPrefabScale = 1f;
     [HideInInspector] public Vector3 botGunOffset = new Vector3(0.05f, 0f, 0.08f);
     [HideInInspector] public Vector3 botGunRotation = new Vector3(0f, 90f, 90f);
+    [HideInInspector] public float botGunScaleMultiplier = 1f;
 
 
     private Material wallMat;
@@ -654,13 +655,15 @@ public class SceneSetup : MonoBehaviour
             botGun.transform.localScale = boneCompensation;
         }
 
-        // If the user assigned a rifle prefab, use it instead of the procedural model
+        // If the user assigned a rifle prefab, use it instead of the procedural model.
+        // Apply the same offset/rotation/scale used for the player's weapon so the
+        // model orientation matches across both viewpoints.
         if (riflePrefab != null)
         {
             GameObject gunInst = Instantiate(riflePrefab, botGun.transform);
-            gunInst.transform.localPosition = Vector3.zero;
-            gunInst.transform.localRotation = Quaternion.identity;
-            gunInst.transform.localScale = Vector3.one * weaponPrefabScale;
+            gunInst.transform.localPosition = weaponPrefabOffset;
+            gunInst.transform.localRotation = Quaternion.Euler(weaponPrefabRotation);
+            gunInst.transform.localScale = Vector3.one * weaponPrefabScale * botGunScaleMultiplier;
             foreach (var c in gunInst.GetComponentsInChildren<Collider>()) Destroy(c);
         }
         else
