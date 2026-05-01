@@ -25,6 +25,8 @@ public class SceneSetup : MonoBehaviour
     [HideInInspector] public Vector3 weaponPrefabOffset = Vector3.zero;
     [HideInInspector] public Vector3 weaponPrefabRotation = Vector3.zero;
     [HideInInspector] public float botPrefabScale = 1f;
+    [HideInInspector] public Vector3 botGunOffset = new Vector3(0.05f, 0f, 0.08f);
+    [HideInInspector] public Vector3 botGunRotation = new Vector3(0f, 90f, 90f);
 
 
     private Material wallMat;
@@ -472,7 +474,12 @@ public class SceneSetup : MonoBehaviour
             // Remove any colliders from the visual prefab (we add our own hitboxes)
             foreach (var c in visual.GetComponentsInChildren<Collider>()) Destroy(c);
 
-            BuildBotSystems(bot);
+            // Disable root motion so the NavMeshAgent (not the animation) drives movement.
+            // Without this, Mixamo animations push the bot through walls.
+            Animator anim = visual.GetComponentInChildren<Animator>();
+            if (anim != null) anim.applyRootMotion = false;
+
+            BuildBotSystems(bot, anim);
             return;
         }
 
@@ -605,7 +612,7 @@ public class SceneSetup : MonoBehaviour
         Debug.Log($"[SceneSetup] Bot spawned at {bot.transform.position} | onNavMesh={agent.isOnNavMesh}");
     }
 
-    private void BuildBotSystems(GameObject bot)
+    private void BuildBotSystems(GameObject bot, Animator anim = null)
     {
         Shader hdrpLit = Shader.Find("HDRP/Lit");
         Material gunMat = CreateHDRPMaterial(hdrpLit, new Color(0.12f, 0.12f, 0.12f));
@@ -613,11 +620,35 @@ public class SceneSetup : MonoBehaviour
         accentMat.SetColor("_EmissiveColor", new Color(0.6f, 0.5f, 0.1f));
         accentMat.EnableKeyword("_EMISSION");
 
-        // Bot's gun (visible in 3rd person) — anchored to right hand area
+        // Find the right hand bone if the model is humanoid; fall back to bot root.
+        Transform gunParent = bot.transform;
+        Vector3 gunLocalPos = new Vector3(0.35f, 1.15f, 0.45f);
+        Quaternion gunLocalRot = Quaternion.identity;
+        if (anim != null && anim.isHuman)
+        {
+            Transform rightHand = anim.GetBoneTransform(HumanBodyBones.RightHand);
+            if (rightHand != null)
+            {
+                gunParent = rightHand;
+                gunLocalPos = botGunOffset;
+                gunLocalRot = Quaternion.Euler(botGunRotation);
+            }
+        }
+
         GameObject botGun = new GameObject("BotGun");
-        botGun.transform.parent = bot.transform;
-        botGun.transform.localPosition = new Vector3(0.35f, 1.15f, 0.45f);
-        botGun.transform.localRotation = Quaternion.identity;
+        botGun.transform.SetParent(gunParent, false);
+        botGun.transform.localPosition = gunLocalPos;
+        botGun.transform.localRotation = gunLocalRot;
+        // Compensate for non-uniform bone scale (Mixamo bones often scale at 0.01),
+        // otherwise the rifle parts get stretched/sheared when rotated.
+        if (gunParent != bot.transform)
+        {
+            Vector3 boneWorldScale = gunParent.lossyScale;
+            botGun.transform.localScale = new Vector3(
+                boneWorldScale.x != 0 ? 1f / boneWorldScale.x : 1f,
+                boneWorldScale.y != 0 ? 1f / boneWorldScale.y : 1f,
+                boneWorldScale.z != 0 ? 1f / boneWorldScale.z : 1f);
+        }
         BuildRifleModel(botGun.transform, gunMat, accentMat, 1.2f);
 
         // Body hitbox (capsule covering the prefab)
