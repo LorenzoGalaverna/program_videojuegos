@@ -28,6 +28,7 @@ public class SceneSetup : MonoBehaviour
     [HideInInspector] public Vector3 botGunOffset = new Vector3(0.05f, 0f, 0.08f);
     [HideInInspector] public Vector3 botGunRotation = new Vector3(0f, 90f, 90f);
     [HideInInspector] public float botGunScaleMultiplier = 1f;
+    [HideInInspector] public Vector3 muzzleLocalOffset = new Vector3(0f, 0f, 0.5f);
 
 
     private Material wallMat;
@@ -378,10 +379,11 @@ public class SceneSetup : MonoBehaviour
         audio.spatialBlend = 0f;
         weapon.audioSource = audio;
 
-        // Muzzle point
+        // Muzzle point — uses the configurable offset so it lines up with the visual
+        // gun barrel of whatever prefab is in use.
         GameObject muzzle = new GameObject("MuzzlePoint");
         muzzle.transform.parent = weaponObj.transform;
-        muzzle.transform.localPosition = new Vector3(0, 0, 0.5f);
+        muzzle.transform.localPosition = muzzleLocalOffset;
         weapon.muzzlePoint = muzzle.transform;
 
         // First-person hands holding the weapon — only build procedural hands when no
@@ -701,10 +703,17 @@ public class SceneSetup : MonoBehaviour
         agent.radius = 0.5f;
         agent.height = 2f;
 
+        // Muzzle point — placed on the BotGun container at the configured muzzle offset
+        // so tracers leave from the barrel of the rifle instead of the bot's head.
+        GameObject botMuzzle = new GameObject("BotMuzzle");
+        botMuzzle.transform.SetParent(botGun.transform, false);
+        botMuzzle.transform.localPosition = muzzleLocalOffset;
+
         // Health + AI
         bot.AddComponent<PlayerHealth>();
         EnemyBot botAI = bot.AddComponent<EnemyBot>();
         botAI.eyePoint = eye.transform;
+        botAI.muzzlePoint = botMuzzle.transform;
 
         Debug.Log($"[SceneSetup] Custom prefab bot spawned at {bot.transform.position} | onNavMesh={agent.isOnNavMesh}");
     }

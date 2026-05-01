@@ -29,6 +29,8 @@ public class FPSBootstrap : MonoBehaviour
     public Vector3 botGunRotation = new Vector3(0f, 90f, 90f);
     [Tooltip("Multiplicador de escala del arma del bot (1 = igual al jugador, 2 = doble)")]
     public float botGunScaleMultiplier = 1f;
+    [Tooltip("Posición del muzzle (donde salen las balas) respecto al arma")]
+    public Vector3 muzzleLocalOffset = new Vector3(0f, 0f, 0.5f);
 
     private MainMenu menu;
 
@@ -58,6 +60,7 @@ public class FPSBootstrap : MonoBehaviour
         setup.botGunOffset = botGunOffset;
         setup.botGunRotation = botGunRotation;
         setup.botGunScaleMultiplier = botGunScaleMultiplier;
+        setup.muzzleLocalOffset = muzzleLocalOffset;
 
         // Add main menu
         menu = gameObject.AddComponent<MainMenu>();

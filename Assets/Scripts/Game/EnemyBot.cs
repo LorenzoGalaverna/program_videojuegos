@@ -21,6 +21,7 @@ public class EnemyBot : MonoBehaviour
 
     [Header("Referencias")]
     public Transform eyePoint;
+    public Transform muzzlePoint; // donde salen las balas (cañón del arma)
 
     private NavMeshAgent agent;
     private PlayerHealth health;
@@ -74,8 +75,6 @@ public class EnemyBot : MonoBehaviour
         UpdateAnimator();
     }
 
-    private float debugSpeed;
-    private bool debugShooting;
     private Vector3 initialSpawnPos;
 
     private void UpdateAnimator()
@@ -83,23 +82,7 @@ public class EnemyBot : MonoBehaviour
         if (animator == null) return;
         float speed = agent.isStopped ? 0f : agent.velocity.magnitude;
         animator.SetFloat(HashSpeed, speed, 0.1f, Time.deltaTime);
-        bool shooting = state == State.Attack && reactionTimer <= 0f;
-        animator.SetBool(HashIsShooting, shooting);
-
-        debugSpeed = speed;
-        debugShooting = shooting;
-    }
-
-    void OnGUI()
-    {
-        if (animator == null) return;
-        GUIStyle s = new GUIStyle(GUI.skin.label) { fontSize = 14, normal = { textColor = Color.yellow } };
-        float y = 120;
-        GUI.Label(new Rect(10, y, 400, 20), $"[Bot] State: {state}", s); y += 18;
-        GUI.Label(new Rect(10, y, 400, 20), $"[Bot] Speed: {debugSpeed:F2} (agent.velocity.magnitude)", s); y += 18;
-        GUI.Label(new Rect(10, y, 400, 20), $"[Bot] IsShooting: {debugShooting}", s); y += 18;
-        GUI.Label(new Rect(10, y, 400, 20), $"[Bot] Anim Speed param: {animator.GetFloat(HashSpeed):F2}", s); y += 18;
-        GUI.Label(new Rect(10, y, 600, 20), $"[Bot] Current clip: {(animator.GetCurrentAnimatorClipInfo(0).Length > 0 ? animator.GetCurrentAnimatorClipInfo(0)[0].clip.name : "?")}", s);
+        animator.SetBool(HashIsShooting, state == State.Attack && reactionTimer <= 0f);
     }
 
     private void UpdateStateTransitions()
@@ -234,8 +217,19 @@ public class EnemyBot : MonoBehaviour
             Random.Range(-spread, spread)
         );
 
-        if (Physics.Raycast(eye.position, aimDir.normalized, out RaycastHit hit, attackRange + 5f))
+        bool hitSomething = Physics.Raycast(eye.position, aimDir.normalized, out RaycastHit hit, attackRange + 5f);
+
+        // Visual tracer starts from the gun's muzzle (not the bot's eye) so it looks
+        // like the bullet leaves the barrel rather than the head. The aim raycast
+        // still uses the eye for accuracy reasons (the muzzle wobbles with the rig).
+        Vector3 tracerStart = muzzlePoint ? muzzlePoint.position : eye.position;
+        Vector3 tracerEnd = hitSomething ? hit.point : eye.position + aimDir.normalized * (attackRange + 5f);
+        BulletEffects.SpawnTracer(tracerStart, tracerEnd);
+
+        if (hitSomething)
         {
+            BulletEffects.SpawnBulletHole(hit);
+
             PlayerHealth ph = hit.collider.GetComponentInParent<PlayerHealth>();
             if (ph != null && ph == playerHealth)
             {
