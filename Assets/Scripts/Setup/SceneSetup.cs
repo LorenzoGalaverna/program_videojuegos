@@ -17,6 +17,15 @@ public class SceneSetup : MonoBehaviour
     public bool buildGameManager = true;
     public bool autoBuildOnAwake = false;
 
+    [HideInInspector] public GameObject pistolPrefab;
+    [HideInInspector] public GameObject riflePrefab;
+    [HideInInspector] public GameObject sniperPrefab;
+    [HideInInspector] public GameObject botBodyPrefab;
+    [HideInInspector] public float weaponPrefabScale = 1f;
+    [HideInInspector] public Vector3 weaponPrefabOffset = Vector3.zero;
+    [HideInInspector] public Vector3 weaponPrefabRotation = Vector3.zero;
+    [HideInInspector] public float botPrefabScale = 1f;
+
 
     private Material wallMat;
     private Material floorMat;
@@ -79,9 +88,24 @@ public class SceneSetup : MonoBehaviour
     {
         Material mat = new Material(shader);
         mat.SetColor("_BaseColor", color);
-        // fallback
-        if (mat.HasProperty("_Color"))
-            mat.SetColor("_Color", color);
+        if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);
+        return mat;
+    }
+
+    // PBR material with metallic + smoothness control (for guns)
+    private Material CreatePBRMaterial(Color color, float metallic, float smoothness, Color? emissive = null)
+    {
+        Shader shader = Shader.Find("HDRP/Lit") ?? Shader.Find("Standard");
+        Material mat = new Material(shader);
+        mat.SetColor("_BaseColor", color);
+        if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", metallic);
+        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
+        if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);
+        if (emissive.HasValue && mat.HasProperty("_EmissiveColor"))
+        {
+            mat.SetColor("_EmissiveColor", emissive.Value);
+            mat.EnableKeyword("_EMISSION");
+        }
         return mat;
     }
 
@@ -139,7 +163,7 @@ public class SceneSetup : MonoBehaviour
         NavMeshSurface surface = navObj.AddComponent<NavMeshSurface>();
         surface.collectObjects = CollectObjects.All;
 
-        // Lighting - add a directional light
+        // Lighting - sol direccional simple
         GameObject lightObj = new GameObject("Sun");
         lightObj.transform.parent = map.transform;
         lightObj.transform.rotation = Quaternion.Euler(50, -30, 0);
@@ -276,10 +300,29 @@ public class SceneSetup : MonoBehaviour
         data.weaponName = name;
         data.weaponType = type;
 
+        // If a custom prefab is assigned, use it instead of the procedural model
+        GameObject prefabToUse = null;
+        switch (type)
+        {
+            case WeaponType.Pistol: prefabToUse = pistolPrefab; break;
+            case WeaponType.Rifle:  prefabToUse = riflePrefab; break;
+            case WeaponType.Sniper: prefabToUse = sniperPrefab; break;
+        }
+
+        if (prefabToUse != null)
+        {
+            GameObject inst = Instantiate(prefabToUse, visual.transform);
+            inst.transform.localPosition = weaponPrefabOffset;
+            inst.transform.localRotation = Quaternion.Euler(weaponPrefabRotation);
+            inst.transform.localScale = Vector3.one * weaponPrefabScale;
+            // Quitar colliders del prefab visual para que no bloqueen raycasts
+            foreach (var c in inst.GetComponentsInChildren<Collider>()) Destroy(c);
+        }
+
         switch (type)
         {
             case WeaponType.Pistol:
-                BuildPistolModel(visual.transform, gunMat, accentMat, 1f);
+                if (prefabToUse == null) BuildPistolModel(visual.transform, gunMat, accentMat, 1f);
                 data.damage = 30;
                 data.fireRate = 0.2f;
                 data.magazineSize = 12;
@@ -288,10 +331,11 @@ public class SceneSetup : MonoBehaviour
                 data.baseSpread = 0.015f;
                 data.recoilUp = 2f;
                 data.moveSpeedMultiplier = 1f;
+                data.adsFovMultiplier = 0.65f; // zoom suave
                 break;
 
             case WeaponType.Rifle:
-                BuildRifleModel(visual.transform, gunMat, accentMat, 1f);
+                if (prefabToUse == null) BuildRifleModel(visual.transform, gunMat, accentMat, 1f);
                 data.damage = 25;
                 data.fireRate = 0.1f;
                 data.magazineSize = 30;
@@ -303,10 +347,11 @@ public class SceneSetup : MonoBehaviour
                 data.recoilUp = 1.5f;
                 data.recoilSide = 0.5f;
                 data.moveSpeedMultiplier = 0.9f;
+                data.adsFovMultiplier = 0.5f; // zoom intermedio
                 break;
 
             case WeaponType.Sniper:
-                BuildSniperModel(visual.transform, gunMat, accentMat, 1f);
+                if (prefabToUse == null) BuildSniperModel(visual.transform, gunMat, accentMat, 1f);
                 data.damage = 80;
                 data.fireRate = 1.5f;
                 data.magazineSize = 5;
@@ -336,8 +381,71 @@ public class SceneSetup : MonoBehaviour
         muzzle.transform.localPosition = new Vector3(0, 0, 0.5f);
         weapon.muzzlePoint = muzzle.transform;
 
+        // First-person hands holding the weapon
+        BuildFirstPersonHands(weaponObj.transform, type);
+
         weaponObj.SetActive(false);
         return weapon;
+    }
+
+    private void BuildFirstPersonHands(Transform weaponRoot, WeaponType type)
+    {
+        Material skin = CreatePBRMaterial(new Color(0.85f, 0.65f, 0.55f), 0f, 0.3f);
+        Material glove = CreatePBRMaterial(new Color(0.10f, 0.10f, 0.10f), 0f, 0.4f);
+
+        // Right hand on grip (always there)
+        GameObject rightHand = new GameObject("RightHand");
+        rightHand.transform.parent = weaponRoot;
+        Vector3 rightHandPos = type == WeaponType.Sniper ? new Vector3(-0.04f, -0.16f, 0.0f)
+                              : type == WeaponType.Pistol ? new Vector3(-0.04f, -0.16f, -0.02f)
+                              : new Vector3(-0.04f, -0.16f, 0.05f);
+        rightHand.transform.localPosition = rightHandPos;
+
+        // Hand
+        AddPart(rightHand.transform, "RPalm", PrimitiveType.Cube,
+                new Vector3(0, 0, 0), new Vector3(0.07f, 0.10f, 0.10f), glove);
+        // Fingers (gripping)
+        AddPart(rightHand.transform, "RFingers", PrimitiveType.Cube,
+                new Vector3(0.03f, -0.02f, 0.03f), new Vector3(0.02f, 0.07f, 0.10f), glove);
+        AddPart(rightHand.transform, "RThumb", PrimitiveType.Cube,
+                new Vector3(-0.025f, 0.02f, 0.04f), new Vector3(0.02f, 0.04f, 0.06f), glove);
+        // Forearm extending back/up out of view
+        AddPart(rightHand.transform, "RForearm", PrimitiveType.Cube,
+                new Vector3(-0.05f, -0.08f, -0.20f), new Vector3(0.08f, 0.10f, 0.30f), skin,
+                new Vector3(-25, 0, 15));
+
+        // Left hand (different position per weapon type)
+        if (type == WeaponType.Pistol)
+        {
+            // Both hands on pistol grip (steady stance)
+            GameObject leftHand = new GameObject("LeftHand");
+            leftHand.transform.parent = weaponRoot;
+            leftHand.transform.localPosition = new Vector3(0.04f, -0.18f, -0.02f);
+
+            AddPart(leftHand.transform, "LPalm", PrimitiveType.Cube,
+                    new Vector3(0, 0, 0), new Vector3(0.06f, 0.09f, 0.10f), glove);
+            AddPart(leftHand.transform, "LFingers", PrimitiveType.Cube,
+                    new Vector3(-0.025f, -0.02f, 0.03f), new Vector3(0.02f, 0.06f, 0.10f), glove);
+            AddPart(leftHand.transform, "LForearm", PrimitiveType.Cube,
+                    new Vector3(0.04f, -0.08f, -0.20f), new Vector3(0.08f, 0.10f, 0.30f), skin,
+                    new Vector3(-25, 0, -15));
+        }
+        else
+        {
+            // Long gun: left hand on handguard / forward grip
+            GameObject leftHand = new GameObject("LeftHand");
+            leftHand.transform.parent = weaponRoot;
+            float fwdGrip = type == WeaponType.Sniper ? 0.45f : 0.45f;
+            leftHand.transform.localPosition = new Vector3(0.04f, -0.10f, fwdGrip);
+
+            AddPart(leftHand.transform, "LPalm", PrimitiveType.Cube,
+                    new Vector3(0, 0, 0), new Vector3(0.06f, 0.09f, 0.10f), glove);
+            AddPart(leftHand.transform, "LFingers", PrimitiveType.Cube,
+                    new Vector3(-0.025f, -0.02f, 0.03f), new Vector3(0.02f, 0.06f, 0.10f), glove);
+            AddPart(leftHand.transform, "LForearm", PrimitiveType.Cube,
+                    new Vector3(0.04f, -0.10f, -0.18f), new Vector3(0.08f, 0.10f, 0.30f), skin,
+                    new Vector3(-15, 0, -25));
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -353,6 +461,20 @@ public class SceneSetup : MonoBehaviour
             bot.transform.position = navHit.position;
         else
             bot.transform.position = desired;
+
+        // If a custom bot prefab is assigned, use it instead of the procedural model
+        if (botBodyPrefab != null)
+        {
+            GameObject visual = Instantiate(botBodyPrefab, bot.transform);
+            visual.transform.localPosition = Vector3.zero;
+            visual.transform.localRotation = Quaternion.identity;
+            visual.transform.localScale = Vector3.one * botPrefabScale;
+            // Remove any colliders from the visual prefab (we add our own hitboxes)
+            foreach (var c in visual.GetComponentsInChildren<Collider>()) Destroy(c);
+
+            BuildBotSystems(bot);
+            return;
+        }
 
         // Materials
         Shader hdrpLit = Shader.Find("HDRP/Lit");
@@ -483,6 +605,59 @@ public class SceneSetup : MonoBehaviour
         Debug.Log($"[SceneSetup] Bot spawned at {bot.transform.position} | onNavMesh={agent.isOnNavMesh}");
     }
 
+    private void BuildBotSystems(GameObject bot)
+    {
+        Shader hdrpLit = Shader.Find("HDRP/Lit");
+        Material gunMat = CreateHDRPMaterial(hdrpLit, new Color(0.12f, 0.12f, 0.12f));
+        Material accentMat = CreateHDRPMaterial(hdrpLit, new Color(1f, 0.85f, 0.2f));
+        accentMat.SetColor("_EmissiveColor", new Color(0.6f, 0.5f, 0.1f));
+        accentMat.EnableKeyword("_EMISSION");
+
+        // Bot's gun (visible in 3rd person) — anchored to right hand area
+        GameObject botGun = new GameObject("BotGun");
+        botGun.transform.parent = bot.transform;
+        botGun.transform.localPosition = new Vector3(0.35f, 1.15f, 0.45f);
+        botGun.transform.localRotation = Quaternion.identity;
+        BuildRifleModel(botGun.transform, gunMat, accentMat, 1.2f);
+
+        // Body hitbox (capsule covering the prefab)
+        GameObject hitbox = new GameObject("BodyHitbox");
+        hitbox.transform.parent = bot.transform;
+        hitbox.transform.localPosition = new Vector3(0, 1f, 0);
+        CapsuleCollider hitCol = hitbox.AddComponent<CapsuleCollider>();
+        hitCol.height = 1.8f;
+        hitCol.radius = 0.4f;
+
+        // Head hitbox (for headshots)
+        GameObject head = new GameObject("Head");
+        head.tag = "Head";
+        head.transform.parent = bot.transform;
+        head.transform.localPosition = new Vector3(0, 1.75f, 0);
+        SphereCollider headCol = head.AddComponent<SphereCollider>();
+        headCol.radius = 0.18f;
+
+        // Eye point (line-of-sight raycasts)
+        GameObject eye = new GameObject("EyePoint");
+        eye.transform.parent = bot.transform;
+        eye.transform.localPosition = new Vector3(0, 1.7f, 0.3f);
+
+        // NavMeshAgent
+        NavMeshAgent agent = bot.AddComponent<NavMeshAgent>();
+        agent.speed = 4.5f;
+        agent.angularSpeed = 250f;
+        agent.acceleration = 12f;
+        agent.stoppingDistance = 0.5f;
+        agent.radius = 0.5f;
+        agent.height = 2f;
+
+        // Health + AI
+        bot.AddComponent<PlayerHealth>();
+        EnemyBot botAI = bot.AddComponent<EnemyBot>();
+        botAI.eyePoint = eye.transform;
+
+        Debug.Log($"[SceneSetup] Custom prefab bot spawned at {bot.transform.position} | onNavMesh={agent.isOnNavMesh}");
+    }
+
     // ──────────────────────────────────────────────
     // GAME MANAGER
     // ──────────────────────────────────────────────
@@ -560,99 +735,251 @@ public class SceneSetup : MonoBehaviour
 
     public void BuildPistolModel(Transform root, Material gunMat, Material accentMat, float scale = 1f)
     {
-        // Slide / upper body
-        AddPart(root, "Slide", PrimitiveType.Cube, new Vector3(0, 0.04f, 0.10f) * scale,
-                new Vector3(0.06f, 0.08f, 0.30f) * scale, gunMat);
+        // PBR materials
+        Material darkMetal = CreatePBRMaterial(new Color(0.08f, 0.08f, 0.08f), 0.85f, 0.55f);
+        Material gripPlastic = CreatePBRMaterial(new Color(0.12f, 0.12f, 0.12f), 0f, 0.25f);
+        Material accent = CreatePBRMaterial(new Color(0.55f, 0.4f, 0.15f), 0.6f, 0.5f);
+
+        // Slide (top, with bevel effect using two parts)
+        AddPart(root, "Slide", PrimitiveType.Cube, new Vector3(0, 0.05f, 0.10f) * scale,
+                new Vector3(0.06f, 0.07f, 0.32f) * scale, darkMetal);
+        AddPart(root, "SlideTop", PrimitiveType.Cube, new Vector3(0, 0.085f, 0.10f) * scale,
+                new Vector3(0.04f, 0.02f, 0.30f) * scale, darkMetal);
+
+        // Slide serrations (rear grip stripes)
+        for (int i = 0; i < 4; i++)
+        {
+            AddPart(root, $"Serration{i}", PrimitiveType.Cube,
+                    new Vector3(0.031f, 0.05f, -0.03f - i * 0.018f) * scale,
+                    new Vector3(0.005f, 0.05f, 0.012f) * scale, accent);
+            AddPart(root, $"SerrationL{i}", PrimitiveType.Cube,
+                    new Vector3(-0.031f, 0.05f, -0.03f - i * 0.018f) * scale,
+                    new Vector3(0.005f, 0.05f, 0.012f) * scale, accent);
+        }
+
         // Lower frame
-        AddPart(root, "Frame", PrimitiveType.Cube, new Vector3(0, -0.04f, 0.05f) * scale,
-                new Vector3(0.06f, 0.08f, 0.20f) * scale, gunMat);
-        // Grip
+        AddPart(root, "Frame", PrimitiveType.Cube, new Vector3(0, -0.02f, 0.05f) * scale,
+                new Vector3(0.06f, 0.07f, 0.22f) * scale, darkMetal);
+
+        // Grip (textured plastic look, slightly angled)
         AddPart(root, "Grip", PrimitiveType.Cube, new Vector3(0, -0.16f, -0.02f) * scale,
-                new Vector3(0.07f, 0.20f, 0.10f) * scale, gunMat,
-                new Vector3(15, 0, 0));
-        // Trigger guard
-        AddPart(root, "TriggerGuard", PrimitiveType.Cube, new Vector3(0, -0.07f, 0.02f) * scale,
-                new Vector3(0.05f, 0.06f, 0.06f) * scale, accentMat);
+                new Vector3(0.07f, 0.20f, 0.10f) * scale, gripPlastic,
+                new Vector3(12, 0, 0));
+        // Grip checker pattern
+        for (int i = 0; i < 3; i++)
+            AddPart(root, $"GripPad{i}", PrimitiveType.Cube,
+                    new Vector3(0.036f, -0.10f - i * 0.04f, -0.02f) * scale,
+                    new Vector3(0.005f, 0.025f, 0.08f) * scale, accent,
+                    new Vector3(12, 0, 0));
+
+        // Trigger guard (rounded with two parts)
+        AddPart(root, "TriggerGuardFront", PrimitiveType.Cube, new Vector3(0, -0.07f, 0.05f) * scale,
+                new Vector3(0.05f, 0.025f, 0.015f) * scale, darkMetal);
+        AddPart(root, "TriggerGuardBottom", PrimitiveType.Cube, new Vector3(0, -0.10f, 0.025f) * scale,
+                new Vector3(0.05f, 0.015f, 0.07f) * scale, darkMetal);
+
+        // Trigger
+        AddPart(root, "Trigger", PrimitiveType.Cube, new Vector3(0, -0.07f, 0.02f) * scale,
+                new Vector3(0.025f, 0.04f, 0.02f) * scale, accent);
+
         // Barrel tip
-        AddPart(root, "BarrelTip", PrimitiveType.Cylinder, new Vector3(0, 0.04f, 0.27f) * scale,
-                new Vector3(0.025f, 0.02f, 0.025f) * scale, gunMat,
+        AddPart(root, "BarrelTip", PrimitiveType.Cylinder, new Vector3(0, 0.04f, 0.28f) * scale,
+                new Vector3(0.028f, 0.025f, 0.028f) * scale, darkMetal,
                 new Vector3(90, 0, 0));
-        // Sight dot
-        AddPart(root, "Sight", PrimitiveType.Cube, new Vector3(0, 0.10f, 0.20f) * scale,
-                new Vector3(0.015f, 0.025f, 0.02f) * scale, accentMat);
+        // Barrel hole
+        AddPart(root, "BarrelHole", PrimitiveType.Cylinder, new Vector3(0, 0.04f, 0.305f) * scale,
+                new Vector3(0.018f, 0.005f, 0.018f) * scale, gripPlastic,
+                new Vector3(90, 0, 0));
+
+        // Front + rear sights
+        AddPart(root, "FrontSight", PrimitiveType.Cube, new Vector3(0, 0.105f, 0.22f) * scale,
+                new Vector3(0.012f, 0.022f, 0.018f) * scale, accent);
+        AddPart(root, "RearSight", PrimitiveType.Cube, new Vector3(0, 0.105f, -0.02f) * scale,
+                new Vector3(0.045f, 0.02f, 0.022f) * scale, darkMetal);
+
+        // Magazine bottom (visible)
+        AddPart(root, "MagBottom", PrimitiveType.Cube, new Vector3(0, -0.27f, -0.025f) * scale,
+                new Vector3(0.07f, 0.015f, 0.10f) * scale, accent,
+                new Vector3(12, 0, 0));
     }
 
     public void BuildRifleModel(Transform root, Material gunMat, Material accentMat, float scale = 1f)
     {
-        // Receiver / body
+        // Material variation: AK-47 vibe — dark metal body, wood grips/stock
+        Material darkMetal = CreatePBRMaterial(new Color(0.10f, 0.10f, 0.10f), 0.85f, 0.55f);
+        Material wood = CreatePBRMaterial(new Color(0.4f, 0.22f, 0.10f), 0f, 0.35f);
+        Material magMetal = CreatePBRMaterial(new Color(0.18f, 0.16f, 0.12f), 0.6f, 0.4f);
+        Material accent = CreatePBRMaterial(new Color(0.55f, 0.45f, 0.20f), 0.4f, 0.5f);
+
+        // Receiver
         AddPart(root, "Receiver", PrimitiveType.Cube, new Vector3(0, 0, 0.20f) * scale,
-                new Vector3(0.07f, 0.10f, 0.45f) * scale, gunMat);
+                new Vector3(0.075f, 0.11f, 0.50f) * scale, darkMetal);
+
+        // Top cover (raised)
+        AddPart(root, "TopCover", PrimitiveType.Cube, new Vector3(0, 0.07f, 0.20f) * scale,
+                new Vector3(0.06f, 0.04f, 0.30f) * scale, darkMetal);
+
         // Barrel
-        AddPart(root, "Barrel", PrimitiveType.Cylinder, new Vector3(0, 0.02f, 0.55f) * scale,
-                new Vector3(0.025f, 0.18f, 0.025f) * scale, gunMat,
+        AddPart(root, "Barrel", PrimitiveType.Cylinder, new Vector3(0, 0.025f, 0.60f) * scale,
+                new Vector3(0.022f, 0.20f, 0.022f) * scale, darkMetal,
                 new Vector3(90, 0, 0));
-        // Magazine
-        AddPart(root, "Magazine", PrimitiveType.Cube, new Vector3(0, -0.13f, 0.18f) * scale,
-                new Vector3(0.06f, 0.18f, 0.10f) * scale, accentMat,
-                new Vector3(-10, 0, 0));
-        // Grip
-        AddPart(root, "Grip", PrimitiveType.Cube, new Vector3(0, -0.13f, 0.05f) * scale,
-                new Vector3(0.06f, 0.18f, 0.07f) * scale, gunMat,
-                new Vector3(20, 0, 0));
-        // Stock
-        AddPart(root, "Stock", PrimitiveType.Cube, new Vector3(0, 0, -0.18f) * scale,
-                new Vector3(0.06f, 0.12f, 0.30f) * scale, gunMat);
-        // Buttstock pad
-        AddPart(root, "StockPad", PrimitiveType.Cube, new Vector3(0, 0, -0.34f) * scale,
-                new Vector3(0.06f, 0.16f, 0.05f) * scale, accentMat);
-        // Front sight
-        AddPart(root, "FrontSight", PrimitiveType.Cube, new Vector3(0, 0.09f, 0.55f) * scale,
-                new Vector3(0.015f, 0.04f, 0.02f) * scale, accentMat);
-        // Rear sight
-        AddPart(root, "RearSight", PrimitiveType.Cube, new Vector3(0, 0.09f, 0.10f) * scale,
-                new Vector3(0.025f, 0.03f, 0.02f) * scale, accentMat);
-        // Foregrip / handguard
-        AddPart(root, "Handguard", PrimitiveType.Cube, new Vector3(0, -0.02f, 0.45f) * scale,
-                new Vector3(0.06f, 0.07f, 0.18f) * scale, gunMat);
+        // Muzzle / flash hider
+        AddPart(root, "Muzzle", PrimitiveType.Cylinder, new Vector3(0, 0.025f, 0.82f) * scale,
+                new Vector3(0.035f, 0.04f, 0.035f) * scale, darkMetal,
+                new Vector3(90, 0, 0));
+        AddPart(root, "MuzzleHole", PrimitiveType.Cylinder, new Vector3(0, 0.025f, 0.86f) * scale,
+                new Vector3(0.022f, 0.005f, 0.022f) * scale, accent,
+                new Vector3(90, 0, 0));
+
+        // Gas tube above barrel
+        AddPart(root, "GasTube", PrimitiveType.Cylinder, new Vector3(0, 0.075f, 0.55f) * scale,
+                new Vector3(0.018f, 0.12f, 0.018f) * scale, darkMetal,
+                new Vector3(90, 0, 0));
+
+        // Curved magazine (3 angled segments to fake the curve)
+        AddPart(root, "MagTop", PrimitiveType.Cube, new Vector3(0, -0.10f, 0.22f) * scale,
+                new Vector3(0.062f, 0.07f, 0.10f) * scale, magMetal,
+                new Vector3(-15, 0, 0));
+        AddPart(root, "MagMid", PrimitiveType.Cube, new Vector3(0, -0.18f, 0.18f) * scale,
+                new Vector3(0.062f, 0.08f, 0.10f) * scale, magMetal,
+                new Vector3(-25, 0, 0));
+        AddPart(root, "MagBot", PrimitiveType.Cube, new Vector3(0, -0.25f, 0.13f) * scale,
+                new Vector3(0.062f, 0.05f, 0.10f) * scale, magMetal,
+                new Vector3(-35, 0, 0));
+
+        // Grip (wood/plastic)
+        AddPart(root, "Grip", PrimitiveType.Cube, new Vector3(0, -0.14f, 0.04f) * scale,
+                new Vector3(0.06f, 0.18f, 0.07f) * scale, wood,
+                new Vector3(22, 0, 0));
+
+        // Wooden stock (AK style)
+        AddPart(root, "StockNeck", PrimitiveType.Cube, new Vector3(0, -0.02f, -0.10f) * scale,
+                new Vector3(0.06f, 0.06f, 0.14f) * scale, wood);
+        AddPart(root, "Stock", PrimitiveType.Cube, new Vector3(0, -0.04f, -0.25f) * scale,
+                new Vector3(0.06f, 0.13f, 0.20f) * scale, wood);
+        // Stock pad
+        AddPart(root, "StockPad", PrimitiveType.Cube, new Vector3(0, -0.04f, -0.36f) * scale,
+                new Vector3(0.062f, 0.16f, 0.025f) * scale, darkMetal);
+
+        // Sights
+        AddPart(root, "FrontSightPost", PrimitiveType.Cube, new Vector3(0, 0.10f, 0.70f) * scale,
+                new Vector3(0.025f, 0.05f, 0.025f) * scale, darkMetal);
+        AddPart(root, "FrontSightBlade", PrimitiveType.Cube, new Vector3(0, 0.13f, 0.70f) * scale,
+                new Vector3(0.005f, 0.03f, 0.015f) * scale, accent);
+        AddPart(root, "RearSight", PrimitiveType.Cube, new Vector3(0, 0.095f, 0.0f) * scale,
+                new Vector3(0.045f, 0.02f, 0.04f) * scale, darkMetal);
+
+        // Handguard (wood)
+        AddPart(root, "HandguardLow", PrimitiveType.Cube, new Vector3(0, -0.04f, 0.50f) * scale,
+                new Vector3(0.07f, 0.06f, 0.20f) * scale, wood);
+        AddPart(root, "HandguardUp", PrimitiveType.Cube, new Vector3(0, 0.05f, 0.50f) * scale,
+                new Vector3(0.07f, 0.04f, 0.20f) * scale, wood);
+
+        // Trigger + guard
+        AddPart(root, "TriggerGuard", PrimitiveType.Cube, new Vector3(0, -0.08f, 0.04f) * scale,
+                new Vector3(0.04f, 0.025f, 0.08f) * scale, darkMetal);
+        AddPart(root, "Trigger", PrimitiveType.Cube, new Vector3(0, -0.075f, 0.04f) * scale,
+                new Vector3(0.02f, 0.035f, 0.018f) * scale, accent);
+
+        // Charging handle (right side)
+        AddPart(root, "ChargingHandle", PrimitiveType.Cube, new Vector3(0.045f, 0.05f, 0.12f) * scale,
+                new Vector3(0.015f, 0.02f, 0.06f) * scale, darkMetal);
     }
 
     public void BuildSniperModel(Transform root, Material gunMat, Material accentMat, float scale = 1f)
     {
+        // AWP-style — green/military
+        Material darkMetal = CreatePBRMaterial(new Color(0.10f, 0.10f, 0.10f), 0.9f, 0.55f);
+        Material body = CreatePBRMaterial(new Color(0.18f, 0.22f, 0.13f), 0.1f, 0.4f); // OD green
+        Material lens = CreatePBRMaterial(new Color(0.05f, 0.20f, 0.10f), 0.95f, 0.95f, new Color(0.05f, 0.4f, 0.15f));
+        Material accent = CreatePBRMaterial(new Color(0.55f, 0.45f, 0.20f), 0.4f, 0.5f);
+
+        // Stock (long, military green)
+        AddPart(root, "StockButt", PrimitiveType.Cube, new Vector3(0, -0.06f, -0.30f) * scale,
+                new Vector3(0.07f, 0.20f, 0.18f) * scale, body);
+        AddPart(root, "StockNeck", PrimitiveType.Cube, new Vector3(0, -0.04f, -0.10f) * scale,
+                new Vector3(0.07f, 0.10f, 0.20f) * scale, body);
+        AddPart(root, "StockPad", PrimitiveType.Cube, new Vector3(0, -0.06f, -0.42f) * scale,
+                new Vector3(0.072f, 0.22f, 0.025f) * scale, darkMetal);
+
+        // Cheek rest (raised)
+        AddPart(root, "CheekRest", PrimitiveType.Cube, new Vector3(0, 0.08f, -0.20f) * scale,
+                new Vector3(0.07f, 0.04f, 0.18f) * scale, body);
+
         // Receiver
         AddPart(root, "Receiver", PrimitiveType.Cube, new Vector3(0, 0, 0.15f) * scale,
-                new Vector3(0.07f, 0.10f, 0.50f) * scale, gunMat);
+                new Vector3(0.075f, 0.11f, 0.50f) * scale, darkMetal);
+
+        // Bolt handle
+        AddPart(root, "Bolt", PrimitiveType.Cylinder, new Vector3(0.05f, 0.04f, 0.10f) * scale,
+                new Vector3(0.012f, 0.04f, 0.012f) * scale, darkMetal,
+                new Vector3(0, 0, 90));
+        AddPart(root, "BoltKnob", PrimitiveType.Sphere, new Vector3(0.085f, 0.04f, 0.10f) * scale,
+                new Vector3(0.022f, 0.022f, 0.022f) * scale, darkMetal);
+
         // Long barrel
-        AddPart(root, "Barrel", PrimitiveType.Cylinder, new Vector3(0, 0.02f, 0.65f) * scale,
-                new Vector3(0.025f, 0.30f, 0.025f) * scale, gunMat,
+        AddPart(root, "Barrel", PrimitiveType.Cylinder, new Vector3(0, 0.025f, 0.65f) * scale,
+                new Vector3(0.024f, 0.30f, 0.024f) * scale, darkMetal,
                 new Vector3(90, 0, 0));
-        // Muzzle brake
-        AddPart(root, "Muzzle", PrimitiveType.Cube, new Vector3(0, 0.02f, 0.95f) * scale,
-                new Vector3(0.05f, 0.05f, 0.06f) * scale, gunMat);
-        // Stock
-        AddPart(root, "Stock", PrimitiveType.Cube, new Vector3(0, -0.02f, -0.20f) * scale,
-                new Vector3(0.07f, 0.14f, 0.40f) * scale, gunMat);
+
+        // Muzzle brake (multi-port)
+        AddPart(root, "MuzzleBrake", PrimitiveType.Cube, new Vector3(0, 0.025f, 0.96f) * scale,
+                new Vector3(0.045f, 0.045f, 0.08f) * scale, darkMetal);
+        AddPart(root, "BrakePort1", PrimitiveType.Cube, new Vector3(0.025f, 0.025f, 0.94f) * scale,
+                new Vector3(0.005f, 0.025f, 0.04f) * scale, accent);
+        AddPart(root, "BrakePort2", PrimitiveType.Cube, new Vector3(-0.025f, 0.025f, 0.94f) * scale,
+                new Vector3(0.005f, 0.025f, 0.04f) * scale, accent);
+
         // Grip
         AddPart(root, "Grip", PrimitiveType.Cube, new Vector3(0, -0.14f, 0.0f) * scale,
-                new Vector3(0.06f, 0.18f, 0.07f) * scale, gunMat,
+                new Vector3(0.06f, 0.18f, 0.07f) * scale, body,
                 new Vector3(20, 0, 0));
+
+        // Trigger guard
+        AddPart(root, "TriggerGuard", PrimitiveType.Cube, new Vector3(0, -0.085f, 0.05f) * scale,
+                new Vector3(0.04f, 0.025f, 0.10f) * scale, darkMetal);
+        AddPart(root, "Trigger", PrimitiveType.Cube, new Vector3(0, -0.08f, 0.05f) * scale,
+                new Vector3(0.018f, 0.04f, 0.018f) * scale, accent);
+
         // Magazine
-        AddPart(root, "Magazine", PrimitiveType.Cube, new Vector3(0, -0.12f, 0.20f) * scale,
-                new Vector3(0.06f, 0.14f, 0.10f) * scale, gunMat);
-        // Scope body
-        AddPart(root, "Scope", PrimitiveType.Cylinder, new Vector3(0, 0.12f, 0.20f) * scale,
-                new Vector3(0.05f, 0.16f, 0.05f) * scale, gunMat,
+        AddPart(root, "Magazine", PrimitiveType.Cube, new Vector3(0, -0.13f, 0.22f) * scale,
+                new Vector3(0.06f, 0.16f, 0.10f) * scale, body);
+
+        // Scope mounts (rings)
+        AddPart(root, "ScopeMount1", PrimitiveType.Cube, new Vector3(0, 0.085f, 0.10f) * scale,
+                new Vector3(0.045f, 0.05f, 0.035f) * scale, darkMetal);
+        AddPart(root, "ScopeMount2", PrimitiveType.Cube, new Vector3(0, 0.085f, 0.30f) * scale,
+                new Vector3(0.045f, 0.05f, 0.035f) * scale, darkMetal);
+
+        // Scope main body (large, multi-section)
+        AddPart(root, "ScopeRear", PrimitiveType.Cylinder, new Vector3(0, 0.13f, 0.05f) * scale,
+                new Vector3(0.06f, 0.05f, 0.06f) * scale, darkMetal,
                 new Vector3(90, 0, 0));
-        // Scope front lens
-        AddPart(root, "ScopeFront", PrimitiveType.Cylinder, new Vector3(0, 0.12f, 0.36f) * scale,
-                new Vector3(0.055f, 0.02f, 0.055f) * scale, accentMat,
+        AddPart(root, "ScopeBody", PrimitiveType.Cylinder, new Vector3(0, 0.13f, 0.20f) * scale,
+                new Vector3(0.045f, 0.12f, 0.045f) * scale, darkMetal,
                 new Vector3(90, 0, 0));
-        // Scope mounts
-        AddPart(root, "ScopeMount1", PrimitiveType.Cube, new Vector3(0, 0.08f, 0.12f) * scale,
-                new Vector3(0.04f, 0.04f, 0.03f) * scale, gunMat);
-        AddPart(root, "ScopeMount2", PrimitiveType.Cube, new Vector3(0, 0.08f, 0.28f) * scale,
-                new Vector3(0.04f, 0.04f, 0.03f) * scale, gunMat);
-        // Bipod (folded)
-        AddPart(root, "Bipod", PrimitiveType.Cube, new Vector3(0, -0.06f, 0.55f) * scale,
-                new Vector3(0.04f, 0.04f, 0.10f) * scale, gunMat);
+        AddPart(root, "ScopeTurret", PrimitiveType.Cylinder, new Vector3(0, 0.18f, 0.20f) * scale,
+                new Vector3(0.025f, 0.025f, 0.025f) * scale, darkMetal);
+        AddPart(root, "ScopeFrontBell", PrimitiveType.Cylinder, new Vector3(0, 0.13f, 0.36f) * scale,
+                new Vector3(0.06f, 0.05f, 0.06f) * scale, darkMetal,
+                new Vector3(90, 0, 0));
+        // Front lens (slight green tint, emissive subtle)
+        AddPart(root, "ScopeLens", PrimitiveType.Cylinder, new Vector3(0, 0.13f, 0.41f) * scale,
+                new Vector3(0.055f, 0.005f, 0.055f) * scale, lens,
+                new Vector3(90, 0, 0));
+        // Rear lens
+        AddPart(root, "ScopeRearLens", PrimitiveType.Cylinder, new Vector3(0, 0.13f, 0.0f) * scale,
+                new Vector3(0.055f, 0.005f, 0.055f) * scale, lens,
+                new Vector3(90, 0, 0));
+
+        // Bipod legs (visible)
+        AddPart(root, "BipodMount", PrimitiveType.Cube, new Vector3(0, -0.06f, 0.55f) * scale,
+                new Vector3(0.04f, 0.04f, 0.06f) * scale, darkMetal);
+        AddPart(root, "BipodLegL", PrimitiveType.Cube, new Vector3(-0.06f, -0.14f, 0.55f) * scale,
+                new Vector3(0.012f, 0.16f, 0.012f) * scale, darkMetal,
+                new Vector3(0, 0, 20));
+        AddPart(root, "BipodLegR", PrimitiveType.Cube, new Vector3(0.06f, -0.14f, 0.55f) * scale,
+                new Vector3(0.012f, 0.16f, 0.012f) * scale, darkMetal,
+                new Vector3(0, 0, -20));
     }
 }

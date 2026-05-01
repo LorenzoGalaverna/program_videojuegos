@@ -8,6 +8,22 @@ public class FPSBootstrap : MonoBehaviour
     public int targetFrameRate = 120;
     public bool showDebugInfo = true;
 
+    [Header("Modelos custom (arrastrá FBX desde Assets/Models)")]
+    public GameObject pistolPrefab;
+    public GameObject riflePrefab;
+    public GameObject sniperPrefab;
+    public GameObject botBodyPrefab;
+
+    [Header("Ajustes de los modelos custom")]
+    [Tooltip("Escala del modelo del arma (probá 0.3 a 2)")]
+    public float weaponPrefabScale = 1f;
+    [Tooltip("Posición del arma respecto a la mano (mover si está mal ubicada)")]
+    public Vector3 weaponPrefabOffset = Vector3.zero;
+    [Tooltip("Rotación del arma en grados (algunos vienen rotados 90/180)")]
+    public Vector3 weaponPrefabRotation = Vector3.zero;
+    [Tooltip("Escala del bot (1 = tamaño normal)")]
+    public float botPrefabScale = 1f;
+
     private MainMenu menu;
 
     void Awake()
@@ -23,6 +39,16 @@ public class FPSBootstrap : MonoBehaviour
             setup = gameObject.AddComponent<SceneSetup>();
             setup.autoBuildOnAwake = false;
         }
+
+        // Pasar prefabs y ajustes al SceneSetup
+        setup.pistolPrefab = pistolPrefab;
+        setup.riflePrefab = riflePrefab;
+        setup.sniperPrefab = sniperPrefab;
+        setup.botBodyPrefab = botBodyPrefab;
+        setup.weaponPrefabScale = weaponPrefabScale;
+        setup.weaponPrefabOffset = weaponPrefabOffset;
+        setup.weaponPrefabRotation = weaponPrefabRotation;
+        setup.botPrefabScale = botPrefabScale;
 
         // Add main menu
         menu = gameObject.AddComponent<MainMenu>();
