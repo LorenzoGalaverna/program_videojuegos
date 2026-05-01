@@ -59,6 +59,9 @@ public class EnemyBot : MonoBehaviour
         else
             Debug.Log($"[Bot] Ready. State: {state}. Position: {transform.position}");
 
+        // Remember the original spawn altitude so respawn can restore it
+        initialSpawnPos = transform.position;
+
         SetNewPatrolTarget();
     }
 
@@ -73,6 +76,7 @@ public class EnemyBot : MonoBehaviour
 
     private float debugSpeed;
     private bool debugShooting;
+    private Vector3 initialSpawnPos;
 
     private void UpdateAnimator()
     {
@@ -270,18 +274,16 @@ public class EnemyBot : MonoBehaviour
     private void OnDeath()
     {
         ChangeState(State.Dead);
-        if (agent.isOnNavMesh)
-        {
-            agent.isStopped = true;
-            agent.enabled = false; // release agent so we can move the transform freely
-        }
+        if (agent.isOnNavMesh) agent.isStopped = true;
 
         if (animator != null)
         {
             animator.SetFloat(HashSpeed, 0f);
             animator.SetBool(HashIsShooting, false);
             animator.SetTrigger(HashDie);
-            // Enable root motion so the Dying animation can move the body to the ground
+            // Enable root motion so the Dying animation visually falls to the ground.
+            // This moves the visual child (where the Animator lives) but NOT the parent
+            // bot transform — the agent on the parent keeps it pinned to the NavMesh.
             animator.applyRootMotion = true;
         }
 
@@ -294,13 +296,29 @@ public class EnemyBot : MonoBehaviour
     {
         health.ResetHealth();
 
-        // Re-enable agent (was disabled on death so the corpse could be moved freely)
-        agent.enabled = true;
-
-        // Disable root motion again so navmesh drives movement (avoids walking through walls)
+        // Disable root motion BEFORE moving anything, otherwise the dying animation's
+        // residual offset on the visual child keeps biasing position.
         if (animator != null) animator.applyRootMotion = false;
 
-        if (GameManager.Instance) GameManager.Instance.RespawnPlayer(gameObject, 1);
+        // Reset the visual child's local transform (it was moved by the dying animation
+        // with root motion on). Without this, the visual stays sunk into the ground.
+        if (animator != null && animator.transform != transform)
+        {
+            animator.transform.localPosition = Vector3.zero;
+            animator.transform.localRotation = Quaternion.identity;
+        }
+
+        // Pick a spawn position: prefer GameManager's varied spawn points, fall back to initial.
+        Vector3 target = initialSpawnPos;
+        if (GameManager.Instance != null)
+        {
+            Transform sp = GameManager.Instance.GetSpawnPoint(1);
+            if (sp != null) target = sp.position;
+        }
+        if (NavMesh.SamplePosition(target, out NavMeshHit hit, 10f, NavMesh.AllAreas))
+            target = hit.position;
+
+        agent.Warp(target);
 
         if (agent.isOnNavMesh) agent.isStopped = false;
         ChangeState(State.Patrol);

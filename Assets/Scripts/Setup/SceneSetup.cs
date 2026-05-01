@@ -383,8 +383,10 @@ public class SceneSetup : MonoBehaviour
         muzzle.transform.localPosition = new Vector3(0, 0, 0.5f);
         weapon.muzzlePoint = muzzle.transform;
 
-        // First-person hands holding the weapon
-        BuildFirstPersonHands(weaponObj.transform, type);
+        // First-person hands holding the weapon — only build procedural hands when no
+        // custom weapon prefab is in use (otherwise the cube hands clip through the model).
+        if (prefabToUse == null)
+            BuildFirstPersonHands(weaponObj.transform, type);
 
         weaponObj.SetActive(false);
         return weapon;
@@ -639,17 +641,32 @@ public class SceneSetup : MonoBehaviour
         botGun.transform.SetParent(gunParent, false);
         botGun.transform.localPosition = gunLocalPos;
         botGun.transform.localRotation = gunLocalRot;
-        // Compensate for non-uniform bone scale (Mixamo bones often scale at 0.01),
-        // otherwise the rifle parts get stretched/sheared when rotated.
+
+        // Compensate for non-uniform bone scale (Mixamo bones often scale at 0.01)
+        Vector3 boneCompensation = Vector3.one;
         if (gunParent != bot.transform)
         {
             Vector3 boneWorldScale = gunParent.lossyScale;
-            botGun.transform.localScale = new Vector3(
+            boneCompensation = new Vector3(
                 boneWorldScale.x != 0 ? 1f / boneWorldScale.x : 1f,
                 boneWorldScale.y != 0 ? 1f / boneWorldScale.y : 1f,
                 boneWorldScale.z != 0 ? 1f / boneWorldScale.z : 1f);
+            botGun.transform.localScale = boneCompensation;
         }
-        BuildRifleModel(botGun.transform, gunMat, accentMat, 1.2f);
+
+        // If the user assigned a rifle prefab, use it instead of the procedural model
+        if (riflePrefab != null)
+        {
+            GameObject gunInst = Instantiate(riflePrefab, botGun.transform);
+            gunInst.transform.localPosition = Vector3.zero;
+            gunInst.transform.localRotation = Quaternion.identity;
+            gunInst.transform.localScale = Vector3.one * weaponPrefabScale;
+            foreach (var c in gunInst.GetComponentsInChildren<Collider>()) Destroy(c);
+        }
+        else
+        {
+            BuildRifleModel(botGun.transform, gunMat, accentMat, 1.2f);
+        }
 
         // Body hitbox (capsule covering the prefab)
         GameObject hitbox = new GameObject("BodyHitbox");
