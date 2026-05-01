@@ -24,6 +24,9 @@ public class Weapon : MonoBehaviour
     private float currentRecoilX;
     private float currentRecoilY;
 
+    // Used by HUD to flash a hitmarker for knife hits
+    public float lastHitTime = -10f;
+
     void Start()
     {
         if (data == null) return;
@@ -99,11 +102,20 @@ public class Weapon : MonoBehaviour
 
         if (hit)
         {
-            BulletEffects.SpawnBulletHole(hitInfo);
-
             // Check if headshot
             bool isHeadshot = hitInfo.collider.CompareTag("Head");
             PlayerHealth targetHealth = hitInfo.collider.GetComponentInParent<PlayerHealth>();
+
+            if (data.weaponType == WeaponType.Knife)
+            {
+                // Knife hit: spawn slash effect at the hit point and notify HUD for hitmarker
+                BulletEffects.SpawnKnifeHit(hitInfo, targetHealth != null);
+                lastHitTime = Time.time;
+            }
+            else
+            {
+                BulletEffects.SpawnBulletHole(hitInfo);
+            }
 
             if (targetHealth != null)
                 targetHealth.TakeDamage(data.damage, isHeadshot);

@@ -50,6 +50,76 @@ public class WeaponManager : MonoBehaviour
         HandleReload();
         HandleADS();
         HandleRecoil();
+        HandleInspect();
+    }
+
+    // ─── Inspect animation (F) ──────────────────────────
+    private float inspectStartTime = -10f;
+    private const float inspectDuration = 1.6f;
+
+    private void HandleInspect()
+    {
+        if (Input.GetKeyDown(KeyCode.F) && Time.time >= inspectStartTime + inspectDuration)
+            inspectStartTime = Time.time;
+
+        if (currentWeapon == null) return;
+
+        // Knife swing has priority over the idle inspect rotation
+        float swingT = (Time.time - swingStartTime) / swingDuration;
+        if (swingT >= 0f && swingT <= 1f)
+        {
+            // Quick slash: rotate forward+sideways and snap back
+            float slashCurve = Mathf.Sin(swingT * Mathf.PI); // 0 → 1 → 0
+            float slashYaw = slashCurve * 50f * swingDirection;   // sideways slash
+            float slashPitch = slashCurve * 35f;                   // forward thrust
+            float slashRoll = slashCurve * 15f * swingDirection;   // wrist twist
+            currentWeapon.transform.localRotation = Quaternion.Euler(slashPitch, slashYaw, slashRoll);
+            if (swingT >= 1f) currentWeapon.transform.localRotation = Quaternion.identity;
+            return;
+        }
+
+        float t = (Time.time - inspectStartTime) / inspectDuration;
+        if (t < 0f || t > 1f) return;
+
+        // Wrist-style inspect: turn 80° to one side, back to center, then 80° to the
+        // other side, with subtle pitch/roll variations for organic feel.
+        // Phase 0.0–0.25: 0 → +80 yaw (right)
+        // Phase 0.25–0.5:  +80 → 0
+        // Phase 0.5–0.75:  0 → -80 yaw (left)
+        // Phase 0.75–1.0:  -80 → 0
+        float yaw, pitch, roll;
+        if (t < 0.25f)
+        {
+            float k = SmoothStep01(t / 0.25f);
+            yaw = k * 80f;
+        }
+        else if (t < 0.5f)
+        {
+            float k = SmoothStep01((t - 0.25f) / 0.25f);
+            yaw = (1f - k) * 80f;
+        }
+        else if (t < 0.75f)
+        {
+            float k = SmoothStep01((t - 0.5f) / 0.25f);
+            yaw = -k * 80f;
+        }
+        else
+        {
+            float k = SmoothStep01((t - 0.75f) / 0.25f);
+            yaw = -(1f - k) * 80f;
+        }
+        // Subtle pitch wobble (looking down the blade) and roll for natural wrist feel
+        pitch = Mathf.Sin(t * Mathf.PI * 2f) * 12f;
+        roll = Mathf.Sin(t * Mathf.PI) * 8f;
+
+        currentWeapon.transform.localRotation = Quaternion.Euler(pitch, yaw, roll);
+        if (t >= 1f) currentWeapon.transform.localRotation = Quaternion.identity;
+    }
+
+    private static float SmoothStep01(float x)
+    {
+        x = Mathf.Clamp01(x);
+        return x * x * (3f - 2f * x);
     }
 
     private void HandleShooting()
@@ -67,9 +137,21 @@ public class WeaponManager : MonoBehaviour
             {
                 onAmmoChanged?.Invoke(currentWeapon.CurrentMagazine, currentWeapon.CurrentReserve);
                 SpawnImpactEffect(hit);
+
+                // Trigger swing animation if it was a melee weapon
+                if (currentWeapon.data.weaponType == WeaponType.Knife)
+                {
+                    swingStartTime = Time.time;
+                    swingDirection = -swingDirection; // alternate sides for variety
+                }
             }
         }
     }
+
+    // ─── Knife swing animation ──────────────────────────
+    private float swingStartTime = -10f;
+    private const float swingDuration = 0.35f;
+    private int swingDirection = 1;
 
     private void HandleWeaponSwitch()
     {
@@ -138,6 +220,26 @@ public class WeaponManager : MonoBehaviour
 
     void OnGUI()
     {
+        // Hit marker: a brief X in the center when the player just hit something.
+        if (currentWeapon != null && Time.time - currentWeapon.lastHitTime < 0.18f)
+        {
+            if (hitMarkerTex == null)
+            {
+                hitMarkerTex = new Texture2D(1, 1);
+                hitMarkerTex.SetPixel(0, 0, Color.white);
+                hitMarkerTex.Apply();
+            }
+            float hmCx = Screen.width * 0.5f;
+            float hmCy = Screen.height * 0.5f;
+            float hmSize = 14f;
+            float hmThick = 2f;
+            GUI.color = Color.white;
+            GUI.DrawTexture(new Rect(hmCx - hmSize, hmCy - hmThick * 0.5f, hmSize, hmThick), hitMarkerTex);
+            GUI.DrawTexture(new Rect(hmCx, hmCy - hmThick * 0.5f, hmSize, hmThick), hitMarkerTex);
+            GUI.DrawTexture(new Rect(hmCx - hmThick * 0.5f, hmCy - hmSize, hmThick, hmSize), hitMarkerTex);
+            GUI.DrawTexture(new Rect(hmCx - hmThick * 0.5f, hmCy, hmThick, hmSize), hitMarkerTex);
+        }
+
         if (!isAiming) return;
         if (scopeTex == null)
         {
@@ -177,6 +279,7 @@ public class WeaponManager : MonoBehaviour
         }
     }
     private static Texture2D scopeTex;
+    private static Texture2D hitMarkerTex;
 
     private void HandleRecoil()
     {

@@ -33,6 +33,14 @@ public class FPSBootstrap : MonoBehaviour
     [Tooltip("Posición del muzzle (donde salen las balas) respecto al arma")]
     public Vector3 muzzleLocalOffset = new Vector3(0f, 0f, 0.5f);
 
+    [Header("Ajustes específicos del cuchillo")]
+    [Tooltip("Multiplicador de escala SOLO para el cuchillo (1 = igual que las otras armas)")]
+    public float knifeScaleMultiplier = 1f;
+    [Tooltip("Rotación EXTRA SOLO para el cuchillo (se suma a Weapon Prefab Rotation)")]
+    public Vector3 knifeExtraRotation = Vector3.zero;
+    [Tooltip("Offset EXTRA SOLO para el cuchillo (se suma a Weapon Prefab Offset)")]
+    public Vector3 knifeExtraOffset = Vector3.zero;
+
     private MainMenu menu;
 
     void Awake()
@@ -63,6 +71,9 @@ public class FPSBootstrap : MonoBehaviour
         setup.botGunRotation = botGunRotation;
         setup.botGunScaleMultiplier = botGunScaleMultiplier;
         setup.muzzleLocalOffset = muzzleLocalOffset;
+        setup.knifeScaleMultiplier = knifeScaleMultiplier;
+        setup.knifeExtraRotation = knifeExtraRotation;
+        setup.knifeExtraOffset = knifeExtraOffset;
 
         // Add main menu
         menu = gameObject.AddComponent<MainMenu>();
@@ -103,7 +114,7 @@ public class FPSBootstrap : MonoBehaviour
         y += 15;
         GUI.Label(new Rect(10, y, 400, 20), "WASD: Move | Shift: Run | Ctrl: Crouch | Space: Jump", style);
         y += 15;
-        GUI.Label(new Rect(10, y, 400, 20), "Mouse: Look | LMB: Shoot | RMB: ADS | R: Reload", style);
+        GUI.Label(new Rect(10, y, 400, 20), "Mouse: Look | LMB: Shoot | RMB: ADS | R: Reload | F: Inspect", style);
         y += 15;
         GUI.Label(new Rect(10, y, 400, 20), "1: Pistol | 2: Rifle | 3: Sniper | 4: Knife | Scroll: Next/Prev", style);
     }

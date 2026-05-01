@@ -25,6 +25,38 @@ public static class BulletEffects
         Object.Destroy(go, TracerLifetime);
     }
 
+    public static void SpawnKnifeHit(RaycastHit hit, bool isFleshHit)
+    {
+        // Quick burst of small lines radiating outward from the impact point —
+        // a simple "spark" that reads visually as a slash effect.
+        for (int i = 0; i < 6; i++)
+        {
+            GameObject go = new GameObject("KnifeSpark");
+            go.transform.position = hit.point;
+            LineRenderer lr = go.AddComponent<LineRenderer>();
+            lr.material = GetTracerMat();
+            lr.startWidth = 0.02f;
+            lr.endWidth = 0.005f;
+            lr.positionCount = 2;
+
+            Vector3 randomDir = Quaternion.LookRotation(hit.normal) * Random.insideUnitSphere * 0.25f;
+            randomDir.z = Mathf.Abs(randomDir.z); // bias outward from surface
+            lr.SetPosition(0, hit.point);
+            lr.SetPosition(1, hit.point + randomDir);
+            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            lr.receiveShadows = false;
+
+            // Red sparks for flesh hits, white-ish for hard surfaces
+            if (lr.material.HasProperty("_EmissiveColor"))
+            {
+                Color c = isFleshHit ? new Color(2f, 0.2f, 0.2f) : new Color(1.5f, 1.5f, 1.5f);
+                lr.material.SetColor("_EmissiveColor", c);
+            }
+
+            Object.Destroy(go, 0.12f);
+        }
+    }
+
     public static void SpawnBulletHole(RaycastHit hit)
     {
         // Skip bullet holes on dynamic things (players, bots): the marker would float

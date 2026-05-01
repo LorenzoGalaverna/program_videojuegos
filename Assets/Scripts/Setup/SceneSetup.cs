@@ -30,6 +30,9 @@ public class SceneSetup : MonoBehaviour
     [HideInInspector] public Vector3 botGunRotation = new Vector3(0f, 90f, 90f);
     [HideInInspector] public float botGunScaleMultiplier = 1f;
     [HideInInspector] public Vector3 muzzleLocalOffset = new Vector3(0f, 0f, 0.5f);
+    [HideInInspector] public float knifeScaleMultiplier = 1f;
+    [HideInInspector] public Vector3 knifeExtraRotation = Vector3.zero;
+    [HideInInspector] public Vector3 knifeExtraOffset = Vector3.zero;
 
 
     private Material wallMat;
@@ -319,9 +322,12 @@ public class SceneSetup : MonoBehaviour
         if (prefabToUse != null)
         {
             GameObject inst = Instantiate(prefabToUse, visual.transform);
-            inst.transform.localPosition = weaponPrefabOffset;
-            inst.transform.localRotation = Quaternion.Euler(weaponPrefabRotation);
-            inst.transform.localScale = Vector3.one * weaponPrefabScale;
+            // Knives often come from a different pack (different scale/orientation),
+            // so allow per-weapon adjustments on top of the shared base values.
+            bool isKnife = type == WeaponType.Knife;
+            inst.transform.localPosition = weaponPrefabOffset + (isKnife ? knifeExtraOffset : Vector3.zero);
+            inst.transform.localRotation = Quaternion.Euler(weaponPrefabRotation + (isKnife ? knifeExtraRotation : Vector3.zero));
+            inst.transform.localScale = Vector3.one * weaponPrefabScale * (isKnife ? knifeScaleMultiplier : 1f);
             // Quitar colliders del prefab visual para que no bloqueen raycasts
             foreach (var c in inst.GetComponentsInChildren<Collider>()) Destroy(c);
         }
