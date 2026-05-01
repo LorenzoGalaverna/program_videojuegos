@@ -26,6 +26,10 @@ public class EnemyBot : MonoBehaviour
     private PlayerHealth health;
     private Transform player;
     private PlayerHealth playerHealth;
+    private Animator animator;
+    private static readonly int HashSpeed = Animator.StringToHash("Speed");
+    private static readonly int HashIsShooting = Animator.StringToHash("IsShooting");
+    private static readonly int HashDie = Animator.StringToHash("Die");
 
     public enum State { Patrol, Chase, Attack, Dead }
     private State state = State.Patrol;
@@ -39,6 +43,7 @@ public class EnemyBot : MonoBehaviour
     {
         agent = GetComponent<NavMeshAgent>();
         health = GetComponent<PlayerHealth>();
+        animator = GetComponentInChildren<Animator>();
 
         if (health) health.onDeath.AddListener(OnDeath);
 
@@ -63,6 +68,15 @@ public class EnemyBot : MonoBehaviour
 
         UpdateStateTransitions();
         ExecuteCurrentState();
+        UpdateAnimator();
+    }
+
+    private void UpdateAnimator()
+    {
+        if (animator == null) return;
+        float speed = agent.isStopped ? 0f : agent.velocity.magnitude;
+        animator.SetFloat(HashSpeed, speed, 0.1f, Time.deltaTime);
+        animator.SetBool(HashIsShooting, state == State.Attack && reactionTimer <= 0f);
     }
 
     private void UpdateStateTransitions()
@@ -238,6 +252,13 @@ public class EnemyBot : MonoBehaviour
     {
         ChangeState(State.Dead);
         if (agent.isOnNavMesh) agent.isStopped = true;
+
+        if (animator != null)
+        {
+            animator.SetFloat(HashSpeed, 0f);
+            animator.SetBool(HashIsShooting, false);
+            animator.SetTrigger(HashDie);
+        }
 
         if (GameManager.Instance) GameManager.Instance.AddPlayerKill();
 
