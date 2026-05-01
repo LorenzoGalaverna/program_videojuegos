@@ -56,7 +56,8 @@ public class WeaponManager : MonoBehaviour
     {
         bool isSemiAuto = currentWeapon.data.weaponType == WeaponType.Pistol
                        || currentWeapon.data.weaponType == WeaponType.Sniper
-                       || currentWeapon.data.weaponType == WeaponType.Shotgun;
+                       || currentWeapon.data.weaponType == WeaponType.Shotgun
+                       || currentWeapon.data.weaponType == WeaponType.Knife;
 
         bool shouldShoot = isSemiAuto ? Input.GetMouseButtonDown(0) : Input.GetMouseButton(0);
 
@@ -99,9 +100,13 @@ public class WeaponManager : MonoBehaviour
             currentWeapon.TryReload();
     }
 
+    private bool weaponVisualsHidden;
+
     private void HandleADS()
     {
-        isAiming = Input.GetMouseButton(1);
+        // Only the sniper can aim down sights — pistol and rifle have no scope
+        bool canAim = currentWeapon.data != null && currentWeapon.data.weaponType == WeaponType.Sniper;
+        isAiming = canAim && Input.GetMouseButton(1);
 
         if (currentWeapon.data == null || playerCamera == null) return;
 
@@ -110,10 +115,68 @@ public class WeaponManager : MonoBehaviour
             : defaultFov;
         playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, targetFov, currentWeapon.data.adsSpeed * Time.deltaTime);
 
-        // Move weapon to ADS position
-        Vector3 targetPos = isAiming ? currentWeapon.data.adsPosition : currentWeapon.data.holdPosition;
-        weaponHolder.localPosition = Vector3.Lerp(weaponHolder.localPosition, targetPos, currentWeapon.data.adsSpeed * Time.deltaTime);
+        // Hide the rifle model only while scoped, restore it when un-scoping or
+        // switching weapons. Track state so we don't iterate renderers every frame.
+        if (isAiming && !weaponVisualsHidden)
+        {
+            SetWeaponVisuals(false);
+            weaponVisualsHidden = true;
+        }
+        else if (!isAiming && weaponVisualsHidden)
+        {
+            SetWeaponVisuals(true);
+            weaponVisualsHidden = false;
+        }
     }
+
+    private void SetWeaponVisuals(bool visible)
+    {
+        if (currentWeapon == null) return;
+        foreach (var rend in currentWeapon.GetComponentsInChildren<Renderer>())
+            rend.enabled = visible;
+    }
+
+    void OnGUI()
+    {
+        if (!isAiming) return;
+        if (scopeTex == null)
+        {
+            scopeTex = new Texture2D(1, 1);
+            scopeTex.SetPixel(0, 0, Color.black);
+            scopeTex.Apply();
+        }
+
+        float w = Screen.width;
+        float h = Screen.height;
+        float radius = h * 0.45f;          // visible area radius (circle)
+        float cx = w * 0.5f;
+        float cy = h * 0.5f;
+
+        // Black borders: left, right, top, bottom strips outside the circle's bounding box
+        GUI.DrawTexture(new Rect(0, 0, cx - radius, h), scopeTex);
+        GUI.DrawTexture(new Rect(cx + radius, 0, w - (cx + radius), h), scopeTex);
+        GUI.DrawTexture(new Rect(cx - radius, 0, radius * 2, cy - radius), scopeTex);
+        GUI.DrawTexture(new Rect(cx - radius, cy + radius, radius * 2, h - (cy + radius)), scopeTex);
+
+        // Reticle: thin crosshair centered on screen
+        float reticleSize = radius * 0.9f;
+        float lineThickness = 1.5f;
+        // Horizontal line
+        GUI.DrawTexture(new Rect(cx - reticleSize, cy - lineThickness * 0.5f, reticleSize * 2, lineThickness), scopeTex);
+        // Vertical line
+        GUI.DrawTexture(new Rect(cx - lineThickness * 0.5f, cy - reticleSize, lineThickness, reticleSize * 2), scopeTex);
+        // Center gap (small circle of clear in the middle for sight pic)
+        // Drawn as 4 small black ticks instead, leaving a clear center
+        float gap = 8f;
+        // (the lines above already have a continuous look — we add tick marks for sniper feel)
+        for (int i = 1; i <= 4; i++)
+        {
+            float off = i * 18f;
+            // small tick marks above and below the horizontal line
+            GUI.DrawTexture(new Rect(cx - 0.5f, cy + gap + off, 1f, 4f), scopeTex);
+        }
+    }
+    private static Texture2D scopeTex;
 
     private void HandleRecoil()
     {
@@ -147,9 +210,13 @@ public class WeaponManager : MonoBehaviour
         if (index < 0 || index >= weapons.Length || index == currentWeaponIndex)
             return;
 
-        // Disable current
+        // Restore visuals on the outgoing weapon (in case it was hidden by ADS)
         if (currentWeapon != null)
+        {
+            SetWeaponVisuals(true);
+            weaponVisualsHidden = false;
             currentWeapon.gameObject.SetActive(false);
+        }
 
         currentWeaponIndex = index;
         currentWeapon = weapons[currentWeaponIndex];

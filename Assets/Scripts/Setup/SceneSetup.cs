@@ -20,6 +20,7 @@ public class SceneSetup : MonoBehaviour
     [HideInInspector] public GameObject pistolPrefab;
     [HideInInspector] public GameObject riflePrefab;
     [HideInInspector] public GameObject sniperPrefab;
+    [HideInInspector] public GameObject knifePrefab;
     [HideInInspector] public GameObject botBodyPrefab;
     [HideInInspector] public float weaponPrefabScale = 1f;
     [HideInInspector] public Vector3 weaponPrefabOffset = Vector3.zero;
@@ -245,13 +246,14 @@ public class SceneSetup : MonoBehaviour
         Weapon pistol = CreateWeaponObject("Pistol", weaponHolder.transform, WeaponType.Pistol);
         Weapon rifle = CreateWeaponObject("AK-47", weaponHolder.transform, WeaponType.Rifle);
         Weapon sniper = CreateWeaponObject("AWP", weaponHolder.transform, WeaponType.Sniper);
+        Weapon knife = CreateWeaponObject("Knife", weaponHolder.transform, WeaponType.Knife);
 
         // Weapon Manager
         WeaponManager wm = player.AddComponent<WeaponManager>();
         wm.weaponHolder = weaponHolder.transform;
         wm.cameraTransform = camObj.transform;
         wm.playerCamera = cam;
-        wm.weapons = new Weapon[] { pistol, rifle, sniper };
+        wm.weapons = new Weapon[] { pistol, rifle, sniper, knife };
         wm.startWeaponIndex = 1; // Start with rifle
 
         // HUD
@@ -311,6 +313,7 @@ public class SceneSetup : MonoBehaviour
             case WeaponType.Pistol: prefabToUse = pistolPrefab; break;
             case WeaponType.Rifle:  prefabToUse = riflePrefab; break;
             case WeaponType.Sniper: prefabToUse = sniperPrefab; break;
+            case WeaponType.Knife:  prefabToUse = knifePrefab; break;
         }
 
         if (prefabToUse != null)
@@ -365,6 +368,21 @@ public class SceneSetup : MonoBehaviour
                 data.recoilUp = 5f;
                 data.adsFovMultiplier = 0.3f;
                 data.moveSpeedMultiplier = 0.75f;
+                break;
+
+            case WeaponType.Knife:
+                if (prefabToUse == null) BuildKnifeModel(visual.transform, gunMat, accentMat, 1f);
+                data.damage = 50;
+                data.fireRate = 0.5f;       // half-second between swings
+                data.range = 2.5f;          // melee reach
+                data.magazineSize = 999;    // effectively infinite, no reload
+                data.reserveAmmo = 0;
+                data.reloadTime = 0f;
+                data.baseSpread = 0f;
+                data.maxSpread = 0f;
+                data.recoilUp = 0f;
+                data.recoilSide = 0f;
+                data.moveSpeedMultiplier = 1.1f; // slightly faster with knife
                 break;
         }
 
@@ -791,6 +809,29 @@ public class SceneSetup : MonoBehaviour
         Destroy(part.GetComponent<Collider>());
         part.GetComponent<Renderer>().material = mat;
         return part;
+    }
+
+    public void BuildKnifeModel(Transform root, Material gunMat, Material accentMat, float scale = 1f)
+    {
+        Material steel = CreatePBRMaterial(new Color(0.75f, 0.78f, 0.82f), 1f, 0.85f);
+        Material handle = CreatePBRMaterial(new Color(0.10f, 0.10f, 0.10f), 0f, 0.3f);
+        Material guard = CreatePBRMaterial(new Color(0.20f, 0.20f, 0.20f), 0.5f, 0.4f);
+
+        // Blade — long thin slab
+        AddPart(root, "Blade", PrimitiveType.Cube, new Vector3(0, 0.02f, 0.20f) * scale,
+                new Vector3(0.012f, 0.04f, 0.30f) * scale, steel);
+        // Blade tip (smaller box at the front to fake a point)
+        AddPart(root, "BladeTip", PrimitiveType.Cube, new Vector3(0, 0.02f, 0.36f) * scale,
+                new Vector3(0.008f, 0.02f, 0.06f) * scale, steel);
+        // Cross-guard (perpendicular to blade)
+        AddPart(root, "Guard", PrimitiveType.Cube, new Vector3(0, 0.02f, 0.04f) * scale,
+                new Vector3(0.05f, 0.02f, 0.025f) * scale, guard);
+        // Handle (grip)
+        AddPart(root, "Handle", PrimitiveType.Cube, new Vector3(0, 0.02f, -0.06f) * scale,
+                new Vector3(0.025f, 0.04f, 0.14f) * scale, handle);
+        // Pommel (end cap)
+        AddPart(root, "Pommel", PrimitiveType.Cube, new Vector3(0, 0.02f, -0.14f) * scale,
+                new Vector3(0.030f, 0.045f, 0.025f) * scale, guard);
     }
 
     public void BuildPistolModel(Transform root, Material gunMat, Material accentMat, float scale = 1f)

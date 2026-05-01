@@ -12,6 +12,7 @@ public class FPSBootstrap : MonoBehaviour
     public GameObject pistolPrefab;
     public GameObject riflePrefab;
     public GameObject sniperPrefab;
+    public GameObject knifePrefab;
     public GameObject botBodyPrefab;
 
     [Header("Ajustes de los modelos custom")]
@@ -52,6 +53,7 @@ public class FPSBootstrap : MonoBehaviour
         setup.pistolPrefab = pistolPrefab;
         setup.riflePrefab = riflePrefab;
         setup.sniperPrefab = sniperPrefab;
+        setup.knifePrefab = knifePrefab;
         setup.botBodyPrefab = botBodyPrefab;
         setup.weaponPrefabScale = weaponPrefabScale;
         setup.weaponPrefabOffset = weaponPrefabOffset;
@@ -103,7 +105,7 @@ public class FPSBootstrap : MonoBehaviour
         y += 15;
         GUI.Label(new Rect(10, y, 400, 20), "Mouse: Look | LMB: Shoot | RMB: ADS | R: Reload", style);
         y += 15;
-        GUI.Label(new Rect(10, y, 400, 20), "1/2/3: Switch Weapons | Scroll: Next/Prev Weapon", style);
+        GUI.Label(new Rect(10, y, 400, 20), "1: Pistol | 2: Rifle | 3: Sniper | 4: Knife | Scroll: Next/Prev", style);
     }
 
     private bool IsMenuVisible()

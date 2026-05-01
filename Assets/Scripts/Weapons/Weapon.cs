@@ -88,10 +88,14 @@ public class Weapon : MonoBehaviour
         // Raycast
         bool hit = Physics.Raycast(cameraTransform.position, spreadDir.normalized, out hitInfo, data.range);
 
-        // Visual tracer + bullet hole at impact (or a far-away point if it missed)
-        Vector3 tracerStart = muzzlePoint ? muzzlePoint.position : cameraTransform.position;
-        Vector3 tracerEnd = hit ? hitInfo.point : cameraTransform.position + spreadDir.normalized * data.range;
-        BulletEffects.SpawnTracer(tracerStart, tracerEnd);
+        // Visual tracer + bullet hole at impact (or a far-away point if it missed).
+        // Skip tracer for melee — a yellow line for a knife slash looks wrong.
+        if (data.weaponType != WeaponType.Knife)
+        {
+            Vector3 tracerStart = muzzlePoint ? muzzlePoint.position : cameraTransform.position;
+            Vector3 tracerEnd = hit ? hitInfo.point : cameraTransform.position + spreadDir.normalized * data.range;
+            BulletEffects.SpawnTracer(tracerStart, tracerEnd);
+        }
 
         if (hit)
         {
