@@ -71,12 +71,31 @@ public class EnemyBot : MonoBehaviour
         UpdateAnimator();
     }
 
+    private float debugSpeed;
+    private bool debugShooting;
+
     private void UpdateAnimator()
     {
         if (animator == null) return;
         float speed = agent.isStopped ? 0f : agent.velocity.magnitude;
         animator.SetFloat(HashSpeed, speed, 0.1f, Time.deltaTime);
-        animator.SetBool(HashIsShooting, state == State.Attack && reactionTimer <= 0f);
+        bool shooting = state == State.Attack && reactionTimer <= 0f;
+        animator.SetBool(HashIsShooting, shooting);
+
+        debugSpeed = speed;
+        debugShooting = shooting;
+    }
+
+    void OnGUI()
+    {
+        if (animator == null) return;
+        GUIStyle s = new GUIStyle(GUI.skin.label) { fontSize = 14, normal = { textColor = Color.yellow } };
+        float y = 120;
+        GUI.Label(new Rect(10, y, 400, 20), $"[Bot] State: {state}", s); y += 18;
+        GUI.Label(new Rect(10, y, 400, 20), $"[Bot] Speed: {debugSpeed:F2} (agent.velocity.magnitude)", s); y += 18;
+        GUI.Label(new Rect(10, y, 400, 20), $"[Bot] IsShooting: {debugShooting}", s); y += 18;
+        GUI.Label(new Rect(10, y, 400, 20), $"[Bot] Anim Speed param: {animator.GetFloat(HashSpeed):F2}", s); y += 18;
+        GUI.Label(new Rect(10, y, 600, 20), $"[Bot] Current clip: {(animator.GetCurrentAnimatorClipInfo(0).Length > 0 ? animator.GetCurrentAnimatorClipInfo(0)[0].clip.name : "?")}", s);
     }
 
     private void UpdateStateTransitions()
@@ -251,13 +270,19 @@ public class EnemyBot : MonoBehaviour
     private void OnDeath()
     {
         ChangeState(State.Dead);
-        if (agent.isOnNavMesh) agent.isStopped = true;
+        if (agent.isOnNavMesh)
+        {
+            agent.isStopped = true;
+            agent.enabled = false; // release agent so we can move the transform freely
+        }
 
         if (animator != null)
         {
             animator.SetFloat(HashSpeed, 0f);
             animator.SetBool(HashIsShooting, false);
             animator.SetTrigger(HashDie);
+            // Enable root motion so the Dying animation can move the body to the ground
+            animator.applyRootMotion = true;
         }
 
         if (GameManager.Instance) GameManager.Instance.AddPlayerKill();
@@ -268,11 +293,28 @@ public class EnemyBot : MonoBehaviour
     private void Respawn()
     {
         health.ResetHealth();
+
+        // Re-enable agent (was disabled on death so the corpse could be moved freely)
+        agent.enabled = true;
+
+        // Disable root motion again so navmesh drives movement (avoids walking through walls)
+        if (animator != null) animator.applyRootMotion = false;
+
         if (GameManager.Instance) GameManager.Instance.RespawnPlayer(gameObject, 1);
 
         if (agent.isOnNavMesh) agent.isStopped = false;
         ChangeState(State.Patrol);
         SetNewPatrolTarget();
+
+        // Reset Animator: clear Die trigger and force transition back to idle.
+        // Without this the bot stays frozen in the last frame of the hit-reaction clip.
+        if (animator != null)
+        {
+            animator.ResetTrigger(HashDie);
+            animator.SetFloat(HashSpeed, 0f);
+            animator.SetBool(HashIsShooting, false);
+            animator.Play("rifle aiming idle", 0, 0f);
+        }
     }
 
     // ─── DEBUG ────────────────────────────────────────
