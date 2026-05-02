@@ -112,7 +112,7 @@ public class FPSBootstrap : MonoBehaviour
         float y = 10;
         GUI.Label(new Rect(10, y, 300, 20), $"FPS: {(1f / Time.smoothDeltaTime):F0}", style);
         y += 15;
-        GUI.Label(new Rect(10, y, 400, 20), "WASD: Move | Shift: Run | Ctrl: Crouch | Space: Jump", style);
+        GUI.Label(new Rect(10, y, 400, 20), "WASD: Run (default) | Shift: Walk silent | Ctrl: Crouch | Space: Jump", style);
         y += 15;
         GUI.Label(new Rect(10, y, 400, 20), "Mouse: Look | LMB: Shoot | RMB: ADS | R: Reload | F: Inspect", style);
         y += 15;
