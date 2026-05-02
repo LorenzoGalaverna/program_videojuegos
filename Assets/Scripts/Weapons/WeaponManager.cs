@@ -23,10 +23,11 @@ public class WeaponManager : MonoBehaviour
     private int currentWeaponIndex = -1;
     private Weapon currentWeapon;
 
-    // Recoil system
-    private Vector2 currentRecoil;      // accumulated recoil applied to camera
-    private Vector2 recoilVelocity;     // for smooth recovery
-    private const float maxRecoilX = 8f; // max vertical recoil degrees
+    // Recoil system — instant kick on shot, fast exponential recovery to center.
+    private Vector2 currentRecoil;
+    private const float maxRecoilX = 12f;
+    [Tooltip("How fast recoil snaps back to center. Higher = snappier.")]
+    public float recoilRecoverRate = 22f;
 
     // Impact effects
     public GameObject bulletHolePrefab;
@@ -138,14 +139,33 @@ public class WeaponManager : MonoBehaviour
                 onAmmoChanged?.Invoke(currentWeapon.CurrentMagazine, currentWeapon.CurrentReserve);
                 SpawnImpactEffect(hit);
 
+                // Apply an INSTANT recoil kick on each shot. Crouching halves the kick.
+                ApplyRecoilImpulse();
+
                 // Trigger swing animation if it was a melee weapon
                 if (currentWeapon.data.weaponType == WeaponType.Knife)
                 {
                     swingStartTime = Time.time;
-                    swingDirection = -swingDirection; // alternate sides for variety
+                    swingDirection = -swingDirection;
                 }
             }
         }
+    }
+
+    private void ApplyRecoilImpulse()
+    {
+        if (currentWeapon == null || currentWeapon.data == null) return;
+        var d = currentWeapon.data;
+
+        float kickUp = d.recoilUp;
+        float kickSide = Random.Range(-d.recoilSide, d.recoilSide);
+
+        // Crouching reduces felt recoil (more stable)
+        PlayerMovement pm = GetComponent<PlayerMovement>();
+        if (pm != null && pm.IsCrouching) { kickUp *= 0.5f; kickSide *= 0.5f; }
+
+        currentRecoil.x = Mathf.Clamp(currentRecoil.x + kickUp, 0f, maxRecoilX);
+        currentRecoil.y = Mathf.Clamp(currentRecoil.y + kickSide, -maxRecoilX, maxRecoilX);
     }
 
     // ─── Knife swing animation ──────────────────────────
@@ -283,28 +303,12 @@ public class WeaponManager : MonoBehaviour
 
     private void HandleRecoil()
     {
-        float recoilX = currentWeapon.GetRecoilX();
-        float recoilY = currentWeapon.GetRecoilY();
+        // Exponential decay toward zero. The kick was applied instantly at shoot time;
+        // this just snaps the camera back. Frame-rate independent thanks to (1 - exp).
+        float k = 1f - Mathf.Exp(-recoilRecoverRate * Time.deltaTime);
+        currentRecoil = Vector2.Lerp(currentRecoil, Vector2.zero, k);
 
-        // Add new recoil (clamped)
-        if (recoilX > 0.01f || Mathf.Abs(recoilY) > 0.01f)
-        {
-            float addX = recoilX * Time.deltaTime * 10f;
-            float addY = recoilY * Time.deltaTime * 10f;
-
-            currentRecoil.x = Mathf.Clamp(currentRecoil.x + addX, 0f, maxRecoilX);
-            currentRecoil.y = Mathf.Clamp(currentRecoil.y + addY, -maxRecoilX, maxRecoilX);
-        }
-
-        // Recover recoil back to zero when not shooting
-        bool isShooting = Input.GetMouseButton(0);
-        if (!isShooting)
-        {
-            float recoverySpeed = currentWeapon.data != null ? currentWeapon.data.recoilRecoverySpeed : 5f;
-            currentRecoil = Vector2.SmoothDamp(currentRecoil, Vector2.zero, ref recoilVelocity, 0.15f, recoverySpeed);
-        }
-
-        // Apply recoil as camera offset (not cumulative rotation)
+        // Apply recoil as camera offset (not cumulative rotation, so it never drifts)
         cameraTransform.localRotation = Quaternion.Euler(-currentRecoil.x, currentRecoil.y, 0f);
     }
 

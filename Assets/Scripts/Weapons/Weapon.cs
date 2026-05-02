@@ -72,10 +72,16 @@ public class Weapon : MonoBehaviour
         nextFireTime = Time.time + data.fireRate;
         onAmmoChanged?.Invoke(currentMagazine, currentReserve);
 
-        // Spread calculation
+        // Spread calculation. Crouching halves spread (better accuracy when stable),
+        // walking with Shift keeps it normal, running adds nothing extra here.
+        float spreadModifier = 1f;
+        PlayerMovement playerMov = GetComponentInParent<PlayerMovement>();
+        if (playerMov != null && playerMov.IsCrouching)
+            spreadModifier = 0.5f;
+
         Vector3 spreadDir = cameraTransform.forward;
-        spreadDir += cameraTransform.right * Random.Range(-currentSpread, currentSpread);
-        spreadDir += cameraTransform.up * Random.Range(-currentSpread, currentSpread);
+        spreadDir += cameraTransform.right * Random.Range(-currentSpread, currentSpread) * spreadModifier;
+        spreadDir += cameraTransform.up * Random.Range(-currentSpread, currentSpread) * spreadModifier;
 
         currentSpread = Mathf.Min(currentSpread + data.spreadIncreasePerShot, data.maxSpread);
 

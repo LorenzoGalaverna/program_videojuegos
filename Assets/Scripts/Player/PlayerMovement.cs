@@ -14,6 +14,13 @@ public class PlayerMovement : MonoBehaviour
     public float groundCheckRadius = 0.3f;
     public LayerMask groundMask;
 
+    [Header("Crouch")]
+    [Tooltip("Camera holder transform — lowered visually when crouching")]
+    public Transform cameraHolder;
+    public float standEyeHeight = 1.7f;
+    public float crouchEyeHeight = 1.0f;
+    public float crouchTransitionSpeed = 10f;
+
     private CharacterController controller;
     private Vector3 velocity;
     private bool isGrounded;
@@ -67,6 +74,15 @@ public class PlayerMovement : MonoBehaviour
             controller.center = isCrouching
                 ? new Vector3(0, crouchHeight / 2f, 0)
                 : new Vector3(0, originalHeight / 2f, 0);
+        }
+
+        // Smoothly lower the camera while crouched so the player visually goes down.
+        if (cameraHolder != null)
+        {
+            float targetY = isCrouching ? crouchEyeHeight : standEyeHeight;
+            Vector3 p = cameraHolder.localPosition;
+            p.y = Mathf.Lerp(p.y, targetY, crouchTransitionSpeed * Time.deltaTime);
+            cameraHolder.localPosition = p;
         }
 
         // Apply gravity

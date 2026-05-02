@@ -198,7 +198,7 @@ public class SceneSetup : MonoBehaviour
         cc.radius = 0.4f;
         cc.center = new Vector3(0, 1f, 0);
 
-        // Movement
+        // Movement (cameraHolder is wired below once it's created)
         PlayerMovement movement = player.AddComponent<PlayerMovement>();
 
         // Health
@@ -208,6 +208,7 @@ public class SceneSetup : MonoBehaviour
         GameObject camHolder = new GameObject("CameraHolder");
         camHolder.transform.parent = player.transform;
         camHolder.transform.localPosition = new Vector3(0, 1.7f, 0);
+        movement.cameraHolder = camHolder.transform;
 
         // Destroy existing main camera if any
         Camera existingCam = Camera.main;
