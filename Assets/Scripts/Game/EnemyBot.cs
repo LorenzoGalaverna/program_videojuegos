@@ -62,10 +62,19 @@ public class EnemyBot : MonoBehaviour
 
         if (!agent.isOnNavMesh)
             Debug.LogError("[Bot] NavMeshAgent NOT on NavMesh! Bake the NavMesh first.");
-        else
-            Debug.Log($"[Bot] Ready. State: {state}. Position: {transform.position}");
 
-        // Remember the original spawn altitude so respawn can restore it
+        // Move the bot to a team-B spawn point on first spawn, so it appears in the same
+        // area where it'll respawn later (instead of the temporary placement from BuildBot).
+        if (GameManager.Instance != null)
+        {
+            Transform sp = GameManager.Instance.GetSpawnPoint(1);
+            if (sp != null && agent.isOnNavMesh)
+                agent.Warp(sp.position);
+        }
+
+        Debug.Log($"[Bot] Ready. State: {state}. Position: {transform.position}");
+
+        // Remember the spawn position so respawn can fall back to it if needed
         initialSpawnPos = transform.position;
 
         SetNewPatrolTarget();
