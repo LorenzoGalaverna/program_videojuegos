@@ -22,6 +22,11 @@ public class EnemyBot : MonoBehaviour
     [Header("Referencias")]
     public Transform eyePoint;
     public Transform muzzlePoint; // donde salen las balas (cañón del arma)
+    public AudioSource shootAudio;
+    public AudioClip shootClip;
+    public AudioSource footstepAudio;
+    public AudioClip[] footstepClips;
+    public float botRunStepRate = 2.2f;
 
     private NavMeshAgent agent;
     private PlayerHealth health;
@@ -73,6 +78,20 @@ public class EnemyBot : MonoBehaviour
         UpdateStateTransitions();
         ExecuteCurrentState();
         UpdateAnimator();
+        UpdateFootsteps();
+    }
+
+    private float nextStepTime;
+
+    private void UpdateFootsteps()
+    {
+        if (footstepAudio == null || footstepClips == null || footstepClips.Length == 0) return;
+        if (agent.isStopped || agent.velocity.sqrMagnitude < 0.5f) return;
+        if (Time.time < nextStepTime) return;
+
+        AudioClip clip = footstepClips[Random.Range(0, footstepClips.Length)];
+        footstepAudio.PlayOneShot(clip);
+        nextStepTime = Time.time + 1f / botRunStepRate;
     }
 
     private Vector3 initialSpawnPos;
@@ -225,6 +244,8 @@ public class EnemyBot : MonoBehaviour
         Vector3 tracerStart = muzzlePoint ? muzzlePoint.position : eye.position;
         Vector3 tracerEnd = hitSomething ? hit.point : eye.position + aimDir.normalized * (attackRange + 5f);
         BulletEffects.SpawnTracer(tracerStart, tracerEnd);
+
+        if (shootAudio && shootClip) shootAudio.PlayOneShot(shootClip);
 
         if (hitSomething)
         {

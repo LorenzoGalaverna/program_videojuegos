@@ -21,17 +21,55 @@ public class PlayerMovement : MonoBehaviour
     public float crouchEyeHeight = 1.0f;
     public float crouchTransitionSpeed = 10f;
 
+    [Header("Footsteps")]
+    public AudioClip[] footstepClips;
+    [Tooltip("Steps per second when running")]
+    public float runStepRate = 2.5f;
+    [Tooltip("Steps per second when walking with Shift")]
+    public float walkStepRate = 1.5f;
+    [Tooltip("Volume of footstep sounds (0 = silent, 1 = full)")]
+    public float footstepVolume = 1f;
+
     private CharacterController controller;
+    private AudioSource audioSource;
     private Vector3 velocity;
     private bool isGrounded;
     private bool isCrouching;
     private float originalHeight;
     private float crouchHeight = 1f;
+    private float nextStepTime;
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
         originalHeight = controller.height;
+
+        // Footstep audio source — non-spatial since it's the local player.
+        // We keep AudioSource.volume at 1 and only scale via PlayOneShot's volumeScale,
+        // otherwise both multiply and the steps end up much quieter than expected.
+        audioSource = gameObject.AddComponent<AudioSource>();
+        audioSource.playOnAwake = false;
+        audioSource.spatialBlend = 0f;
+        audioSource.volume = 1f;
+
+        // Auto-load footstep clips if none assigned in Inspector.
+        // Looks for Audio/Footstep_1, Footstep_2, ... in Resources.
+        if (footstepClips == null || footstepClips.Length == 0)
+        {
+            var clips = new System.Collections.Generic.List<AudioClip>();
+            for (int i = 1; i <= 6; i++)
+            {
+                AudioClip c = Resources.Load<AudioClip>($"Audio/Footstep_{i}");
+                if (c != null) clips.Add(c);
+            }
+            // Fallback: any single Footstep clip
+            if (clips.Count == 0)
+            {
+                AudioClip c = Resources.Load<AudioClip>("Audio/Footstep");
+                if (c != null) clips.Add(c);
+            }
+            footstepClips = clips.ToArray();
+        }
     }
 
     void Update()
@@ -88,6 +126,26 @@ public class PlayerMovement : MonoBehaviour
         // Apply gravity
         velocity.y += gravity * Time.deltaTime;
         controller.Move(velocity * Time.deltaTime);
+
+        UpdateFootsteps(move.sqrMagnitude > 0.01f);
+    }
+
+    private void UpdateFootsteps(bool isMoving)
+    {
+        // Crouching is silent (the whole point of crouching), and so is Shift-walk.
+        // Only running on the ground produces footstep sounds.
+        if (!isMoving || !isGrounded || isCrouching) return;
+        if (footstepClips == null || footstepClips.Length == 0) return;
+
+        bool shiftHeld = Input.GetKey(KeyCode.LeftShift);
+        if (shiftHeld) return; // silent walk
+
+        float rate = runStepRate;
+        if (Time.time < nextStepTime) return;
+
+        AudioClip clip = footstepClips[Random.Range(0, footstepClips.Length)];
+        audioSource.PlayOneShot(clip, footstepVolume);
+        nextStepTime = Time.time + 1f / rate;
     }
 
     public bool IsGrounded => isGrounded;

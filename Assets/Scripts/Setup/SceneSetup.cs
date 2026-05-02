@@ -396,6 +396,18 @@ public class SceneSetup : MonoBehaviour
         data.holdPosition = new Vector3(0.2f, -0.15f, 0.4f);
         data.adsPosition = new Vector3(0f, -0.08f, 0.3f);
 
+        // Auto-load audio clips from Resources/Audio/<weaponType>_<action>.
+        // E.g.: "Audio/Rifle_Shoot", "Audio/Pistol_Reload", "Audio/Sniper_Empty".
+        // Falls back to a generic clip if a per-weapon one isn't found.
+        string typeName = type.ToString();
+        data.shootSound = LoadClip($"Audio/{typeName}_Shoot") ?? LoadClip("Audio/Generic_Shoot");
+        data.reloadSound = LoadClip($"Audio/{typeName}_Reload") ?? LoadClip("Audio/Generic_Reload");
+        data.emptySound = LoadClip($"Audio/{typeName}_Empty") ?? LoadClip("Audio/Generic_Empty");
+
+        // Knife-specific flesh impact sound (wall hits just use the swing swoosh)
+        if (type == WeaponType.Knife)
+            weapon.knifeFleshHitSound = LoadClip("Audio/Knife_Flesh");
+
         weapon.data = data;
 
         // Audio source
@@ -642,6 +654,11 @@ public class SceneSetup : MonoBehaviour
         Debug.Log($"[SceneSetup] Bot spawned at {bot.transform.position} | onNavMesh={agent.isOnNavMesh}");
     }
 
+    private static AudioClip LoadClip(string resourcePath)
+    {
+        return Resources.Load<AudioClip>(resourcePath);
+    }
+
     private void BuildBotSystems(GameObject bot, Animator anim = null)
     {
         Shader hdrpLit = Shader.Find("HDRP/Lit");
@@ -734,11 +751,46 @@ public class SceneSetup : MonoBehaviour
         botMuzzle.transform.SetParent(botGun.transform, false);
         botMuzzle.transform.localPosition = muzzleLocalOffset;
 
+        // 3D-spatial audio source for bot's gunshots — gets louder up close, fades with distance
+        AudioSource botShootAudio = bot.AddComponent<AudioSource>();
+        botShootAudio.playOnAwake = false;
+        botShootAudio.spatialBlend = 1f;          // fully 3D
+        botShootAudio.minDistance = 5f;            // full volume within 5m
+        botShootAudio.maxDistance = 50f;           // inaudible past 50m
+        botShootAudio.rolloffMode = AudioRolloffMode.Linear;
+        botShootAudio.volume = 1f;
+
+        // Separate 3D-spatial source for footsteps (quieter, shorter audible range)
+        AudioSource botFootstepAudio = bot.AddComponent<AudioSource>();
+        botFootstepAudio.playOnAwake = false;
+        botFootstepAudio.spatialBlend = 1f;
+        botFootstepAudio.minDistance = 2f;
+        botFootstepAudio.maxDistance = 20f;
+        botFootstepAudio.rolloffMode = AudioRolloffMode.Linear;
+        botFootstepAudio.volume = 1f;
+
+        // Load footstep variations from Resources/Audio (same set the player uses)
+        var stepClips = new System.Collections.Generic.List<AudioClip>();
+        for (int i = 1; i <= 6; i++)
+        {
+            AudioClip c = LoadClip($"Audio/Footstep_{i}");
+            if (c != null) stepClips.Add(c);
+        }
+        if (stepClips.Count == 0)
+        {
+            AudioClip c = LoadClip("Audio/Footstep");
+            if (c != null) stepClips.Add(c);
+        }
+
         // Health + AI
         bot.AddComponent<PlayerHealth>();
         EnemyBot botAI = bot.AddComponent<EnemyBot>();
         botAI.eyePoint = eye.transform;
         botAI.muzzlePoint = botMuzzle.transform;
+        botAI.shootAudio = botShootAudio;
+        botAI.shootClip = LoadClip("Audio/Rifle_Shoot") ?? LoadClip("Audio/Generic_Shoot");
+        botAI.footstepAudio = botFootstepAudio;
+        botAI.footstepClips = stepClips.ToArray();
 
         Debug.Log($"[SceneSetup] Custom prefab bot spawned at {bot.transform.position} | onNavMesh={agent.isOnNavMesh}");
     }

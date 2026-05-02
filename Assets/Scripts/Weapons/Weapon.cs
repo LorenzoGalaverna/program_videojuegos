@@ -27,6 +27,14 @@ public class Weapon : MonoBehaviour
     // Used by HUD to flash a hitmarker for knife hits
     public float lastHitTime = -10f;
 
+    // Extra impact sound for knife flesh hits (set in SceneSetup)
+    public AudioClip knifeFleshHitSound;
+
+    private float shootSoundStart;
+    private float reloadSoundStart;
+    private float emptySoundStart;
+    private float fleshSoundStart;
+
     void Start()
     {
         if (data == null) return;
@@ -34,6 +42,39 @@ public class Weapon : MonoBehaviour
         currentReserve = data.reserveAmmo;
         currentSpread = data.baseSpread;
         onAmmoChanged?.Invoke(currentMagazine, currentReserve);
+
+        // Force-load audio data at startup so the first shot doesn't pay decompression cost.
+        // Also detect any leading silence in each clip so playback can skip past it —
+        // some downloaded SFX have ~100–500ms of pre-roll baked in.
+        if (data.shootSound) { data.shootSound.LoadAudioData(); shootSoundStart = FindFirstAudioSample(data.shootSound); }
+        if (data.reloadSound) { data.reloadSound.LoadAudioData(); reloadSoundStart = FindFirstAudioSample(data.reloadSound); }
+        if (data.emptySound) { data.emptySound.LoadAudioData(); emptySoundStart = FindFirstAudioSample(data.emptySound); }
+        if (knifeFleshHitSound) { knifeFleshHitSound.LoadAudioData(); fleshSoundStart = FindFirstAudioSample(knifeFleshHitSound); }
+    }
+
+    private static float FindFirstAudioSample(AudioClip clip)
+    {
+        const float silenceThreshold = 0.01f;
+        // Sample at most the first second of the clip — anything more than that is
+        // probably an unusual mix and we don't want to skip real audio.
+        int sampleCount = Mathf.Min(clip.samples * clip.channels, clip.frequency * clip.channels);
+        float[] samples = new float[sampleCount];
+        if (!clip.GetData(samples, 0)) return 0f;
+        for (int i = 0; i < samples.Length; i++)
+        {
+            if (Mathf.Abs(samples[i]) > silenceThreshold)
+                return (float)i / (clip.frequency * clip.channels);
+        }
+        return 0f;
+    }
+
+    private void PlayInstant(AudioClip clip, float startTime)
+    {
+        if (audioSource == null || clip == null) return;
+        audioSource.Stop();
+        audioSource.clip = clip;
+        audioSource.time = startTime;
+        audioSource.Play();
     }
 
     void Update()
@@ -61,8 +102,7 @@ public class Weapon : MonoBehaviour
 
         if (currentMagazine <= 0)
         {
-            if (audioSource && data.emptySound)
-                audioSource.PlayOneShot(data.emptySound);
+            PlayInstant(data.emptySound, emptySoundStart);
             TryReload();
             return false;
         }
@@ -91,8 +131,7 @@ public class Weapon : MonoBehaviour
 
         // Effects
         if (muzzleFlash) muzzleFlash.Play();
-        if (audioSource && data.shootSound)
-            audioSource.PlayOneShot(data.shootSound);
+        PlayInstant(data.shootSound, shootSoundStart);
 
         // Raycast
         bool hit = Physics.Raycast(cameraTransform.position, spreadDir.normalized, out hitInfo, data.range);
@@ -117,6 +156,11 @@ public class Weapon : MonoBehaviour
                 // Knife hit: spawn slash effect at the hit point and notify HUD for hitmarker
                 BulletEffects.SpawnKnifeHit(hitInfo, targetHealth != null);
                 lastHitTime = Time.time;
+
+                // Extra impact sound only for flesh hits — wall hits just use the swoosh.
+                // PlayOneShot here so it layers on top of the swoosh that just started.
+                if (targetHealth != null && audioSource && knifeFleshHitSound != null)
+                    audioSource.PlayOneShot(knifeFleshHitSound);
             }
             else
             {
@@ -142,8 +186,7 @@ public class Weapon : MonoBehaviour
         isReloading = true;
         reloadEndTime = Time.time + data.reloadTime;
 
-        if (audioSource && data.reloadSound)
-            audioSource.PlayOneShot(data.reloadSound);
+        PlayInstant(data.reloadSound, reloadSoundStart);
     }
 
     private void FinishReload()
