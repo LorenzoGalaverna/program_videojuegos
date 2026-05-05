@@ -3,8 +3,11 @@ using UnityEngine;
 public class MainMenu : MonoBehaviour
 {
     public SceneSetup sceneSetup;
+    public NetworkLobby networkLobby; // assign via Inspector
 
     private bool menuVisible = true;
+    private bool lanScreen;
+    private string ipInput = "localhost";
     private float lanMessageTimer;
     private string lanMessage = "";
 
@@ -99,29 +102,50 @@ public class MainMenu : MonoBehaviour
         float btnH = 70;
         float btnX = cx - btnW / 2f;
 
-        // Offline vs Bot
-        if (GUI.Button(new Rect(btnX, cy - 70, btnW, btnH), "OFFLINE  vs  BOT", buttonStyle))
+        if (!lanScreen)
         {
-            StartOffline();
-        }
+            // Main menu
+            if (GUI.Button(new Rect(btnX, cy - 70, btnW, btnH), "OFFLINE  vs  BOT", buttonStyle))
+                StartOffline();
 
-        // LAN (disabled)
-        GUI.color = new Color(0.4f, 0.4f, 0.4f);
-        if (GUI.Button(new Rect(btnX, cy + 20, btnW, btnH), "LAN  (1 vs 1)", disabledButtonStyle))
-        {
-            lanMessage = "EN CONSTRUCCIÓN";
-            lanMessageTimer = 2.5f;
-        }
-        GUI.color = Color.white;
+            if (GUI.Button(new Rect(btnX, cy + 20, btnW, btnH), "LAN  MULTIPLAYER", buttonStyle))
+                lanScreen = true;
 
-        // Quit
-        GUIStyle quitStyle = new GUIStyle(buttonStyle) { fontSize = 18 };
-        if (GUI.Button(new Rect(btnX + btnW / 4f, cy + 130, btnW / 2f, 45), "Salir", quitStyle))
+            GUIStyle quitStyle = new GUIStyle(buttonStyle) { fontSize = 18 };
+            if (GUI.Button(new Rect(btnX + btnW / 4f, cy + 130, btnW / 2f, 45), "Salir", quitStyle))
+            {
+                Application.Quit();
+                #if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+                #endif
+            }
+        }
+        else
         {
-            Application.Quit();
-            #if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-            #endif
+            // LAN sub-menu: Host / Join + IP input
+            if (GUI.Button(new Rect(btnX, cy - 100, btnW, btnH), "HOST  LAN", buttonStyle))
+                StartHost();
+
+            // IP input
+            GUIStyle ipLabel = new GUIStyle(GUI.skin.label) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
+            ipLabel.normal.textColor = new Color(1f, 1f, 1f, 0.8f);
+            GUI.Label(new Rect(btnX, cy - 10, btnW, 24), "IP del host:", ipLabel);
+            GUIStyle ipField = new GUIStyle(GUI.skin.textField) { fontSize = 18, alignment = TextAnchor.MiddleCenter };
+            ipInput = GUI.TextField(new Rect(btnX, cy + 14, btnW, 36), ipInput, ipField);
+
+            if (GUI.Button(new Rect(btnX, cy + 60, btnW, btnH), "JOIN", buttonStyle))
+                StartJoin();
+
+            GUIStyle backStyle = new GUIStyle(buttonStyle) { fontSize = 18 };
+            if (GUI.Button(new Rect(btnX + btnW / 4f, cy + 150, btnW / 2f, 45), "← Volver", backStyle))
+                lanScreen = false;
+
+            // Show our local IPs so the host can share one with the joiner
+            GUIStyle ipsStyle = new GUIStyle(GUI.skin.label) { fontSize = 12, alignment = TextAnchor.MiddleCenter };
+            ipsStyle.normal.textColor = new Color(1f, 1f, 1f, 0.5f);
+            GUI.Label(new Rect(0, cy + 210, Screen.width, 20),
+                "Tu IP: " + string.Join(", ", NetworkLobby.GetLocalIPs()),
+                ipsStyle);
         }
 
         // LAN message
@@ -151,5 +175,25 @@ public class MainMenu : MonoBehaviour
             sceneSetup.BuildScene();
         else
             Debug.LogError("[MainMenu] No SceneSetup found in scene.");
+    }
+
+    private void StartHost()
+    {
+        if (networkLobby == null) networkLobby = FindAnyObjectByType<NetworkLobby>();
+        if (networkLobby == null) { Debug.LogError("[MainMenu] No NetworkLobby in scene."); return; }
+        menuVisible = false;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        networkLobby.StartHostMode();
+    }
+
+    private void StartJoin()
+    {
+        if (networkLobby == null) networkLobby = FindAnyObjectByType<NetworkLobby>();
+        if (networkLobby == null) { Debug.LogError("[MainMenu] No NetworkLobby in scene."); return; }
+        menuVisible = false;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        networkLobby.StartClientMode(ipInput);
     }
 }

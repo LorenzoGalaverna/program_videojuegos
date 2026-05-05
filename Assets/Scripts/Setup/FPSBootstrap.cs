@@ -78,6 +78,9 @@ public class FPSBootstrap : MonoBehaviour
         // Add main menu
         menu = gameObject.AddComponent<MainMenu>();
         menu.sceneSetup = setup;
+        // Wire NetworkLobby (created by the user as a separate GameObject in the scene).
+        // Optional: only present when LAN multiplayer is set up.
+        menu.networkLobby = FindAnyObjectByType<NetworkLobby>();
     }
 
     void Start()
