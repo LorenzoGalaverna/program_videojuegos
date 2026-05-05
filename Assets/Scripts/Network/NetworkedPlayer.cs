@@ -9,6 +9,8 @@ public class NetworkedPlayer : NetworkBehaviour
 {
     [Tooltip("Optional 3rd-person visual (e.g. Swat model). Hidden on the local client because we use 1st person.")]
     public GameObject thirdPersonModel;
+    [Tooltip("Scale of the 3rd-person model as seen by other players (1 = original).")]
+    public float thirdPersonScale = 1.7f;
 
     public override void OnStartLocalPlayer()
     {
@@ -32,6 +34,17 @@ public class NetworkedPlayer : NetworkBehaviour
         {
             CharacterController cc = GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
+
+            // Apply the configured 3rd-person scale so the remote model isn't tiny
+            // compared to the local first-person view.
+            if (thirdPersonModel != null)
+                thirdPersonModel.transform.localScale = Vector3.one * thirdPersonScale;
+
+            // Give the remote player a visible rifle in their right hand so other
+            // clients see them holding a weapon (instead of empty hands).
+            SceneSetup setup = FindAnyObjectByType<SceneSetup>();
+            if (setup != null && thirdPersonModel != null)
+                setup.AttachRifleToHumanoidHand(thirdPersonModel.transform);
         }
     }
 

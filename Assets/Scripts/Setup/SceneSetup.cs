@@ -680,6 +680,39 @@ public class SceneSetup : MonoBehaviour
         return Resources.Load<AudioClip>(resourcePath);
     }
 
+    // Attach a rifle to the right hand bone of a humanoid model, using the same offsets
+    // and scale that the bot uses. Used by NetworkedPlayer for the 3rd-person view of
+    // remote players so they have a visible weapon.
+    public GameObject AttachRifleToHumanoidHand(Transform humanoidRoot)
+    {
+        if (humanoidRoot == null) return null;
+        Animator anim = humanoidRoot.GetComponentInChildren<Animator>();
+        if (anim == null || !anim.isHuman) return null;
+        Transform rightHand = anim.GetBoneTransform(HumanBodyBones.RightHand);
+        if (rightHand == null) return null;
+
+        GameObject gunHolder = new GameObject("ThirdPersonGun");
+        gunHolder.transform.SetParent(rightHand, false);
+        gunHolder.transform.localPosition = botGunOffset;
+        gunHolder.transform.localRotation = Quaternion.Euler(botGunRotation);
+
+        Vector3 boneScale = rightHand.lossyScale;
+        gunHolder.transform.localScale = new Vector3(
+            boneScale.x != 0 ? 1f / boneScale.x : 1f,
+            boneScale.y != 0 ? 1f / boneScale.y : 1f,
+            boneScale.z != 0 ? 1f / boneScale.z : 1f);
+
+        if (riflePrefab != null)
+        {
+            GameObject gun = Instantiate(riflePrefab, gunHolder.transform);
+            gun.transform.localPosition = weaponPrefabOffset;
+            gun.transform.localRotation = Quaternion.Euler(weaponPrefabRotation);
+            gun.transform.localScale = Vector3.one * weaponPrefabScale * botGunScaleMultiplier;
+            foreach (var c in gun.GetComponentsInChildren<Collider>()) Destroy(c);
+        }
+        return gunHolder;
+    }
+
     private void BuildBotSystems(GameObject bot, Animator anim = null)
     {
         Shader hdrpLit = Shader.Find("HDRP/Lit");

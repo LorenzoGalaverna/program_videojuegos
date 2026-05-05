@@ -103,6 +103,7 @@ MonoBehaviour:
   syncMode: 0
   syncInterval: 0
   thirdPersonModel: {fileID: 5355380955403402748}
+  thirdPersonScale: 1.1
 --- !u!143 &5583578951468910483
 CharacterController:
   m_ObjectHideFlags: 0
