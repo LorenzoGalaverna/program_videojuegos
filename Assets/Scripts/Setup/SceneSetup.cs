@@ -198,11 +198,34 @@ public class SceneSetup : MonoBehaviour
         cc.radius = 0.4f;
         cc.center = new Vector3(0, 1f, 0);
 
-        // Movement (cameraHolder is wired below once it's created)
-        PlayerMovement movement = player.AddComponent<PlayerMovement>();
+        EquipPlayer(player);
+        return player.transform;
+    }
 
-        // Health
-        PlayerHealth health = player.AddComponent<PlayerHealth>();
+    // Used by Mirror's NetworkedPlayer prefab: turns an existing GameObject into a
+    // fully-featured local player (camera, weapons, HUD, etc.). The prefab brings
+    // its own CharacterController + networking components, so we don't recreate those.
+    public void EquipPlayer(GameObject player)
+    {
+        if (!player.CompareTag("Player")) player.tag = "Player";
+        if (player.GetComponent<CharacterController>() == null)
+        {
+            CharacterController cc = player.AddComponent<CharacterController>();
+            cc.height = 2f;
+            cc.radius = 0.4f;
+            cc.center = new Vector3(0, 1f, 0);
+        }
+
+        // Movement
+        PlayerMovement movement = player.GetComponent<PlayerMovement>() ?? player.AddComponent<PlayerMovement>();
+
+        // Health (may already exist on the prefab so it's networked)
+        PlayerHealth health = player.GetComponent<PlayerHealth>() ?? player.AddComponent<PlayerHealth>();
+        EquipPlayerInner(player, movement, health);
+    }
+
+    private void EquipPlayerInner(GameObject player, PlayerMovement movement, PlayerHealth health)
+    {
 
         // Camera
         GameObject camHolder = new GameObject("CameraHolder");
@@ -275,8 +298,6 @@ public class SceneSetup : MonoBehaviour
                 Invoke("RespawnPlayer", 3f);
             }
         });
-
-        return player.transform;
     }
 
     private void RespawnPlayer()
