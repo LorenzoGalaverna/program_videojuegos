@@ -143,6 +143,11 @@ public class Weapon : MonoBehaviour
             Vector3 tracerStart = muzzlePoint ? muzzlePoint.position : cameraTransform.position;
             Vector3 tracerEnd = hit ? hitInfo.point : cameraTransform.position + spreadDir.normalized * data.range;
             BulletEffects.SpawnTracer(tracerStart, tracerEnd);
+
+            // In LAN, also broadcast the tracer so remote clients see this player shooting.
+            NetworkedPlayer net = GetComponentInParent<NetworkedPlayer>();
+            if (net != null && net.isLocalPlayer)
+                net.BroadcastTracer(tracerStart, tracerEnd);
         }
 
         if (hit)

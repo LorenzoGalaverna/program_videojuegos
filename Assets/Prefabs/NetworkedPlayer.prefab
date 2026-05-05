@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 7089887989631769305}
   - component: {fileID: -4717506539363751482}
   - component: {fileID: 5583578951468910483}
+  - component: {fileID: 4441284168589772443}
   m_Layer: 0
   m_Name: NetworkedPlayer
   m_TagString: Untagged
@@ -129,6 +130,28 @@ CharacterController:
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0
   m_Center: {x: 0, y: 1, z: 0}
+--- !u!114 &4441284168589772443
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2200916794788835690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 690949443086340a2ad2c5ed52f5ccd4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  maxHealth: 100
+  onHealthChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  onDeath:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!1 &5355380955403402748
 GameObject:
   m_ObjectHideFlags: 0
