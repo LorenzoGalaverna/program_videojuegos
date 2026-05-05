@@ -179,7 +179,7 @@ public class MainMenu : MonoBehaviour
 
     private void StartHost()
     {
-        if (networkLobby == null) networkLobby = FindAnyObjectByType<NetworkLobby>();
+        ResolveNetworkLobby();
         if (networkLobby == null) { Debug.LogError("[MainMenu] No NetworkLobby in scene."); return; }
         menuVisible = false;
         Cursor.lockState = CursorLockMode.Locked;
@@ -189,11 +189,21 @@ public class MainMenu : MonoBehaviour
 
     private void StartJoin()
     {
-        if (networkLobby == null) networkLobby = FindAnyObjectByType<NetworkLobby>();
+        ResolveNetworkLobby();
         if (networkLobby == null) { Debug.LogError("[MainMenu] No NetworkLobby in scene."); return; }
         menuVisible = false;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
         networkLobby.StartClientMode(ipInput);
+    }
+
+    // FindAnyObjectByType misses the NetworkLobby once Mirror moves it to
+    // DontDestroyOnLoad. Use the NetworkManager singleton, which Mirror keeps
+    // as a static reference, and fall back to includeInactive lookup.
+    private void ResolveNetworkLobby()
+    {
+        if (networkLobby != null) return;
+        if (Mirror.NetworkManager.singleton is NetworkLobby lobby) { networkLobby = lobby; return; }
+        networkLobby = FindAnyObjectByType<NetworkLobby>(FindObjectsInactive.Include);
     }
 }

@@ -168,7 +168,15 @@ public class Weapon : MonoBehaviour
             }
 
             if (targetHealth != null)
-                targetHealth.TakeDamage(data.damage, isHeadshot);
+            {
+                // In networked play we route damage through the local NetworkedPlayer's
+                // Command — the server is the authority. Offline we apply directly.
+                NetworkedPlayer myNet = GetComponentInParent<NetworkedPlayer>();
+                if (myNet != null && myNet.isLocalPlayer)
+                    myNet.RequestDamage(hitInfo.collider.gameObject, data.damage, isHeadshot);
+                else
+                    targetHealth.TakeDamage(data.damage, isHeadshot);
+            }
         }
 
         // Auto reload

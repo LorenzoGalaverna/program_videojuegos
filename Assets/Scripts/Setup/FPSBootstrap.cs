@@ -79,8 +79,10 @@ public class FPSBootstrap : MonoBehaviour
         menu = gameObject.AddComponent<MainMenu>();
         menu.sceneSetup = setup;
         // Wire NetworkLobby (created by the user as a separate GameObject in the scene).
-        // Optional: only present when LAN multiplayer is set up.
-        menu.networkLobby = FindAnyObjectByType<NetworkLobby>();
+        // Use includeInactive in case it sits under DontDestroyOnLoad after Mirror initializes.
+        menu.networkLobby = FindAnyObjectByType<NetworkLobby>(FindObjectsInactive.Include);
+        if (menu.networkLobby == null && Mirror.NetworkManager.singleton is NetworkLobby lobby)
+            menu.networkLobby = lobby;
     }
 
     void Start()

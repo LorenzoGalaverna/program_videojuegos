@@ -50,14 +50,26 @@ public class NetworkedPlayer : NetworkBehaviour
 
     private void WarpToSpawn()
     {
-        if (GameManager.Instance == null) return;
-        Transform sp = GameManager.Instance.GetSpawnPoint(0);
-        if (sp == null) return;
+        // Spawn position is set authoritatively by the server in OnServerAddPlayer,
+        // so the client just trusts whatever transform it received. Nothing to do here.
+    }
 
-        CharacterController cc = GetComponent<CharacterController>();
-        if (cc != null) cc.enabled = false;
-        transform.position = sp.position;
-        transform.rotation = sp.rotation;
-        if (cc != null) cc.enabled = true;
+    // Called by Weapon on the LOCAL shooter when their raycast hits another player.
+    // Routes the request to the server, which is the authority for health changes.
+    public void RequestDamage(GameObject hitObject, int damage, bool isHeadshot)
+    {
+        if (!isLocalPlayer) return;
+        if (hitObject == null) return;
+        var targetIdentity = hitObject.GetComponentInParent<NetworkIdentity>();
+        if (targetIdentity == null) return;
+        CmdApplyDamage(targetIdentity, damage, isHeadshot);
+    }
+
+    [Command]
+    private void CmdApplyDamage(NetworkIdentity target, int damage, bool isHeadshot)
+    {
+        if (target == null) return;
+        var ph = target.GetComponent<PlayerHealth>();
+        if (ph != null) ph.TakeDamage(damage, isHeadshot);
     }
 }

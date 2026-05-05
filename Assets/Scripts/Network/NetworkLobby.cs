@@ -1,66 +1,74 @@
 using UnityEngine;
 using Mirror;
 
-// Coordinates the LAN flow inside the real OutdoorsScene:
-//  - Builds the level via SceneSetup (skipping player + bot — Mirror spawns players)
-//  - Hosts a Mirror server, or joins one as a client
-//  - Single source of truth for "are we currently in LAN mode?"
+// Custom Mirror NetworkManager that handles the LAN flow for the OutdoorsScene.
+//  - Builds the level via SceneSetup (skipping the offline player + bot)
+//  - Spawns each new player at a different team spawn point (alternating)
+//  - Acts as the host/client controller invoked by MainMenu
 [RequireComponent(typeof(kcp2k.KcpTransport))]
-[RequireComponent(typeof(NetworkManager))]
-public class NetworkLobby : MonoBehaviour
+public class NetworkLobby : NetworkManager
 {
-    [Tooltip("Drag the NetworkedPlayer prefab from Assets/Prefabs/")]
-    public GameObject playerPrefab;
-
     [Tooltip("Reference to SceneSetup so we can build the level without spawning offline player/bot")]
     public SceneSetup sceneSetup;
 
-    private NetworkManager nm;
     public static bool IsLanActive { get; private set; }
 
-    void Awake()
+    private int spawnCounter = 0;
+
+    public override void Awake()
     {
+        base.Awake();
         var transport = GetComponent<kcp2k.KcpTransport>();
-        Transport.active = transport;
-
-        nm = GetComponent<NetworkManager>();
-        nm.transport = transport;
-        nm.networkAddress = "0.0.0.0";
-
-        if (playerPrefab != null) nm.playerPrefab = playerPrefab;
-        else Debug.LogError("[NetworkLobby] Player Prefab not assigned. Networked spawning will fail.");
+        if (transport != null)
+        {
+            Transport.active = transport;
+            this.transport = transport;
+        }
+        networkAddress = "0.0.0.0";
     }
 
     public void StartHostMode()
     {
-        if (sceneSetup == null) sceneSetup = FindAnyObjectByType<SceneSetup>();
-        if (sceneSetup != null)
-        {
-            // LAN: we don't want the offline player/bot — Mirror handles players,
-            // and the bot is offline-only by design.
-            sceneSetup.buildPlayer = false;
-            sceneSetup.buildBot = false;
-            sceneSetup.BuildScene();
-        }
-
+        BuildSceneIfNeeded();
         IsLanActive = true;
-        nm.networkAddress = "0.0.0.0";
-        nm.StartHost();
+        networkAddress = "0.0.0.0";
+        StartHost();
     }
 
     public void StartClientMode(string ipAddress)
     {
-        if (sceneSetup == null) sceneSetup = FindAnyObjectByType<SceneSetup>();
-        if (sceneSetup != null)
-        {
-            sceneSetup.buildPlayer = false;
-            sceneSetup.buildBot = false;
-            sceneSetup.BuildScene();
-        }
-
+        BuildSceneIfNeeded();
         IsLanActive = true;
-        nm.networkAddress = string.IsNullOrEmpty(ipAddress) ? "localhost" : ipAddress;
-        nm.StartClient();
+        networkAddress = string.IsNullOrEmpty(ipAddress) ? "localhost" : ipAddress;
+        StartClient();
+    }
+
+    private void BuildSceneIfNeeded()
+    {
+        if (sceneSetup == null) sceneSetup = FindAnyObjectByType<SceneSetup>();
+        if (sceneSetup == null) return;
+        sceneSetup.buildPlayer = false;
+        sceneSetup.buildBot = false;
+        sceneSetup.BuildScene();
+    }
+
+    // Server picks alternating spawn points so two players don't pile on top of each
+    // other. Even-indexed players go to Team A spawns, odd-indexed to Team B.
+    public override void OnServerAddPlayer(NetworkConnectionToClient conn)
+    {
+        Vector3 spawnPos = Vector3.zero;
+        Quaternion spawnRot = Quaternion.identity;
+
+        if (GameManager.Instance != null)
+        {
+            int team = (spawnCounter % 2 == 0) ? 0 : 1;
+            Transform sp = GameManager.Instance.GetSpawnPoint(team);
+            if (sp != null) { spawnPos = sp.position; spawnRot = sp.rotation; }
+        }
+        spawnCounter++;
+
+        GameObject player = Instantiate(playerPrefab, spawnPos, spawnRot);
+        NetworkServer.AddPlayerForConnection(conn, player);
     }
 
     public static System.Collections.Generic.List<string> GetLocalIPs()
