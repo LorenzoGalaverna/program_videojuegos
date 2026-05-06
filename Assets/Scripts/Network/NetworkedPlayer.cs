@@ -195,6 +195,23 @@ public class NetworkedPlayer : NetworkBehaviour
     [ClientRpc(includeOwner = false)]
     private void RpcSpawnTracer(Vector3 from, Vector3 to) => BulletEffects.SpawnTracer(from, to);
 
+    // ─── Score / End-game delivery (called server-side by NetworkLobby) ──────────
+
+    [ClientRpc]
+    public void RpcReceiveScores(int myKills, int enemyKills)
+    {
+        if (!isLocalPlayer) return;
+        GameManager.Instance?.SyncNetworkScores(myKills, enemyKills);
+    }
+
+    [ClientRpc]
+    public void RpcEndGame(int myKills, int enemyKills)
+    {
+        if (!isLocalPlayer) return;
+        GameManager.Instance?.SyncNetworkScores(myKills, enemyKills);
+        GameManager.Instance?.EndGame();
+    }
+
     // ─── Damage routing ────────────────────────────────────────────────────────
 
     public void RequestDamage(GameObject hitObject, int damage, bool isHeadshot)

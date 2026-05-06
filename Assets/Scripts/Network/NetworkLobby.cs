@@ -6,7 +6,9 @@ using System.Collections.Generic;
 // Custom Mirror NetworkManager that handles the LAN flow for the OutdoorsScene.
 //  - Builds the level via SceneSetup (skipping the offline player + bot)
 //  - Spawns each new player at a different team spawn point (alternating)
-//  - Tracks authoritative kill scores via SyncVars so both machines always agree
+//  - Tracks authoritative kill scores server-side and delivers them per-player via
+//    NetworkedPlayer.RpcReceiveScores / RpcEndGame (Mirror Weaver forbids SyncVars and
+//    ClientRpc inside NetworkManager subclasses, so we delegate to NetworkedPlayer)
 //  - Handles server-side respawn so the client-player can respawn even when not server
 [RequireComponent(typeof(kcp2k.KcpTransport))]
 public class NetworkLobby : NetworkManager
@@ -21,9 +23,8 @@ public class NetworkLobby : NetworkManager
     // Ordered list of spawned player NetworkIdentities (index = spawn slot)
     private readonly List<NetworkIdentity> spawnedPlayers = new List<NetworkIdentity>();
 
-    // Authoritative kill counts per spawn slot, replicated to every client
-    [SyncVar(hook = nameof(OnScoreSync))] private int syncScore0; // kills by slot-0 (host)
-    [SyncVar(hook = nameof(OnScoreSync))] private int syncScore1; // kills by slot-1 (joiner)
+    // Server-only authoritative kill counts: scores[0] = kills by slot-0, scores[1] = kills by slot-1
+    private readonly int[] scores = new int[2];
 
     public override void Awake()
     {
@@ -96,20 +97,47 @@ public class NetworkLobby : NetworkManager
     public void OnPlayerDied(NetworkIdentity dying)
     {
         int slot = spawnedPlayers.IndexOf(dying);
-        if (slot == 0)      syncScore1++; // slot-0 died → slot-1 scored
-        else if (slot == 1) syncScore0++; // slot-1 died → slot-0 scored
-        else return;                      // untracked object (shouldn't happen)
+        if (slot == 0)      scores[1]++; // slot-0 died → slot-1 scored
+        else if (slot == 1) scores[0]++; // slot-1 died → slot-0 scored
+        else return;
 
-        if (GameManager.Instance != null &&
-            (syncScore0 >= GameManager.Instance.killsToWin || syncScore1 >= GameManager.Instance.killsToWin))
+        bool gameOver = GameManager.Instance != null &&
+                        (scores[0] >= GameManager.Instance.killsToWin ||
+                         scores[1] >= GameManager.Instance.killsToWin);
+
+        if (gameOver)
         {
-            RpcEndGame(syncScore0, syncScore1);
+            BroadcastEndGame();
         }
-
-        StartCoroutine(ServerRespawnPlayer(dying, 3f));
+        else
+        {
+            BroadcastScores();
+            StartCoroutine(ServerRespawnPlayer(dying, 3f));
+        }
     }
 
-    [Server]
+    // Push updated kill counts to each player from their own perspective.
+    private void BroadcastScores()
+    {
+        for (int i = 0; i < spawnedPlayers.Count && i < 2; i++)
+        {
+            var np = spawnedPlayers[i].GetComponent<NetworkedPlayer>();
+            if (np == null) continue;
+            np.RpcReceiveScores(scores[i], scores[1 - i]);
+        }
+    }
+
+    // Push final scores and trigger end-game screen on every client.
+    private void BroadcastEndGame()
+    {
+        for (int i = 0; i < spawnedPlayers.Count && i < 2; i++)
+        {
+            var np = spawnedPlayers[i].GetComponent<NetworkedPlayer>();
+            if (np == null) continue;
+            np.RpcEndGame(scores[i], scores[1 - i]);
+        }
+    }
+
     private IEnumerator ServerRespawnPlayer(NetworkIdentity player, float delay)
     {
         yield return new WaitForSeconds(delay);
@@ -125,46 +153,6 @@ public class NetworkLobby : NetworkManager
         int team = slot >= 0 ? slot % 2 : 0;
         Transform sp = GameManager.Instance.GetSpawnPoint(team);
         if (sp != null) np.RpcRespawnAt(sp.position, sp.rotation);
-    }
-
-    // SyncVar hook — fires on all clients whenever either score SyncVar changes.
-    private void OnScoreSync(int old, int newVal) => ApplyScoresToGameManager();
-
-    private void ApplyScoresToGameManager()
-    {
-        if (GameManager.Instance == null) return;
-
-        int mySlot = -1;
-        foreach (var np in FindObjectsByType<NetworkedPlayer>(FindObjectsSortMode.None))
-        {
-            if (np.isLocalPlayer) { mySlot = np.SpawnSlot; break; }
-        }
-        if (mySlot < 0) return;
-
-        int myKills    = mySlot == 0 ? syncScore0 : syncScore1;
-        int enemyKills = mySlot == 0 ? syncScore1 : syncScore0;
-        GameManager.Instance.SyncNetworkScores(myKills, enemyKills);
-    }
-
-    // Delivers final authoritative scores to all clients and triggers the end-game screen.
-    [ClientRpc]
-    private void RpcEndGame(int score0, int score1)
-    {
-        if (GameManager.Instance == null) return;
-
-        // Apply final scores before ending (SyncVar propagation may still be in flight)
-        int mySlot = -1;
-        foreach (var np in FindObjectsByType<NetworkedPlayer>(FindObjectsSortMode.None))
-        {
-            if (np.isLocalPlayer) { mySlot = np.SpawnSlot; break; }
-        }
-        if (mySlot >= 0)
-        {
-            int myKills    = mySlot == 0 ? score0 : score1;
-            int enemyKills = mySlot == 0 ? score1 : score0;
-            GameManager.Instance.SyncNetworkScores(myKills, enemyKills);
-        }
-        GameManager.Instance.EndGame();
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────────
