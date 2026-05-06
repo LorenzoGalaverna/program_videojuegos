@@ -80,6 +80,15 @@ public class GameManager : MonoBehaviour
             EndGame();
     }
 
+    // Called by NetworkLobby in LAN mode to push authoritative scores from the server.
+    // Does not re-check win conditions — NetworkLobby handles that via RpcEndGame.
+    public void SyncNetworkScores(int myKills, int enemyKills)
+    {
+        playerScore = myKills;
+        enemyScore  = enemyKills;
+        onScoreChanged?.Invoke(playerScore, enemyScore);
+    }
+
     public void EndGame()
     {
         gameActive = false;

@@ -12,67 +12,72 @@ public class NetworkedPlayer : NetworkBehaviour
     [Tooltip("Scale of the 3rd-person model as seen by other players (1 = original).")]
     public float thirdPersonScale = 1.7f;
 
+    // Assigned by NetworkLobby when this player is spawned (0 = first/host, 1 = joiner)
+    [SyncVar] public int SpawnSlot;
+
+    // Animation state replicated to remote clients so they see movement and shooting
+    [SyncVar(hook = nameof(OnSyncSpeedChanged))]    private float syncSpeed;
+    [SyncVar(hook = nameof(OnSyncShootingChanged))] private bool  syncIsShooting;
+
+    // Currently held weapon index — remote clients hide the rifle prop when knife (index 3) is equipped
+    [SyncVar(hook = nameof(OnWeaponIndexSynced))] private int syncWeaponIndex = 1;
+
     private CharacterController cachedCC;
     private Animator thirdPersonAnimator;
-    private static readonly int HashSpeed = Animator.StringToHash("Speed");
+    private Transform thirdPersonGun;   // cached reference to the attached rifle prop
+    private float lastAnimSyncTime;
+    private int   lastSentWeaponIndex = -1;
+    private const float AnimSyncInterval = 0.05f; // 20 Hz
+
+    private static readonly int HashSpeed      = Animator.StringToHash("Speed");
     private static readonly int HashIsShooting = Animator.StringToHash("IsShooting");
 
     public override void OnStartLocalPlayer()
     {
         // Hide the 3rd-person body for our own view, but KEEP the GameObject + Animator
-        // active so NetworkAnimator can still sync parameters to remote clients.
-        // Disabling the whole hierarchy stops the Animator from updating.
+        // active so SyncVars can still sync parameters to remote clients.
         if (thirdPersonModel != null)
         {
             foreach (var rend in thirdPersonModel.GetComponentsInChildren<Renderer>())
                 rend.enabled = false;
         }
 
-        // Equip ourselves with the full player rig (camera, weapons, HUD, movement…)
         SceneSetup setup = FindAnyObjectByType<SceneSetup>();
         if (setup != null) setup.EquipPlayer(gameObject);
-        else Debug.LogError("[NetworkedPlayer] SceneSetup not found in scene — local player is not equipped.");
+        else Debug.LogError("[NetworkedPlayer] SceneSetup not found — local player is not equipped.");
 
-        // Warp to a team spawn point so we don't appear inside a wall
         WarpToSpawn();
     }
 
     private void Start()
     {
-        // Build hitboxes (body capsule + head sphere) sized to the visible 3rd-person
-        // model, scaled by thirdPersonScale. Without these, raycasts hit the small
-        // CharacterController capsule, missing the much larger visible Swat.
         BuildHitboxes();
 
-        // For non-local players, disable CharacterController so it doesn't fight
-        // with NetworkTransform — their position is driven entirely by replication.
         if (!isLocalPlayer)
         {
             CharacterController cc = GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
 
-            // Apply the configured 3rd-person scale so the remote model isn't tiny
-            // compared to the local first-person view.
             if (thirdPersonModel != null)
                 thirdPersonModel.transform.localScale = Vector3.one * thirdPersonScale;
 
-            // Give the remote player a visible rifle in their right hand so other
-            // clients see them holding a weapon (instead of empty hands).
             SceneSetup setup = FindAnyObjectByType<SceneSetup>();
             if (setup != null && thirdPersonModel != null)
-                setup.AttachRifleToHumanoidHand(thirdPersonModel.transform);
+            {
+                GameObject gunObj = setup.AttachRifleToHumanoidHand(thirdPersonModel.transform);
+                thirdPersonGun = gunObj != null ? gunObj.transform : null;
+                // Apply current weapon state in case syncWeaponIndex already arrived
+                UpdateThirdPersonWeaponVisual(syncWeaponIndex);
+            }
         }
     }
 
     private void BuildHitboxes()
     {
-        // Skip if we already built them (Awake-style guards aren't needed because
-        // Start runs once per spawn).
         if (transform.Find("BodyHitbox") != null) return;
 
         float scale = Mathf.Max(thirdPersonScale, 0.5f);
 
-        // Body capsule, parented to root so it follows position but not animation
         GameObject body = new GameObject("BodyHitbox");
         body.transform.SetParent(transform, false);
         body.transform.localPosition = new Vector3(0, 1f * scale, 0);
@@ -80,7 +85,6 @@ public class NetworkedPlayer : NetworkBehaviour
         capsule.height = 1.8f * scale;
         capsule.radius = 0.4f * scale;
 
-        // Head sphere (tagged so headshot multiplier kicks in)
         GameObject head = new GameObject("Head");
         head.tag = "Head";
         head.transform.SetParent(transform, false);
@@ -89,11 +93,7 @@ public class NetworkedPlayer : NetworkBehaviour
         sphere.radius = 0.18f * scale;
     }
 
-    private void WarpToSpawn()
-    {
-        // Spawn position is set authoritatively by the server in OnServerAddPlayer,
-        // so the client just trusts whatever transform it received. Nothing to do here.
-    }
+    private void WarpToSpawn() { /* position is set server-side in OnServerAddPlayer */ }
 
     private void Update()
     {
@@ -101,9 +101,6 @@ public class NetworkedPlayer : NetworkBehaviour
         UpdateAnimatorParams();
     }
 
-    // Drive the 3rd-person Animator parameters from local input/movement so that
-    // NetworkAnimator can replicate the values to remote clients (they then see
-    // walk/run/idle on this player's body).
     private void UpdateAnimatorParams()
     {
         if (thirdPersonAnimator == null && thirdPersonModel != null)
@@ -113,12 +110,79 @@ public class NetworkedPlayer : NetworkBehaviour
         if (cachedCC == null) cachedCC = GetComponent<CharacterController>();
         Vector3 vel = cachedCC != null ? cachedCC.velocity : Vector3.zero;
         vel.y = 0f;
-        thirdPersonAnimator.SetFloat(HashSpeed, vel.magnitude, 0.1f, Time.deltaTime);
-        // IsShooting set when LMB is held (rough but visible)
-        thirdPersonAnimator.SetBool(HashIsShooting, Input.GetMouseButton(0));
+        float speed    = vel.magnitude;
+        bool  shooting = Input.GetMouseButton(0);
+
+        thirdPersonAnimator.SetFloat(HashSpeed,      speed, 0.1f, Time.deltaTime);
+        thirdPersonAnimator.SetBool(HashIsShooting,  shooting);
+
+        // Sync animation state to remote clients at 20 Hz
+        if (Time.time - lastAnimSyncTime >= AnimSyncInterval)
+        {
+            lastAnimSyncTime = Time.time;
+            CmdUpdateAnimState(speed, shooting);
+        }
+
+        // Sync weapon index whenever the local player switches weapons
+        WeaponManager wm = GetComponent<WeaponManager>();
+        if (wm != null && wm.CurrentWeapon != null)
+        {
+            int idx = System.Array.IndexOf(wm.weapons, wm.CurrentWeapon);
+            if (idx >= 0 && idx != lastSentWeaponIndex)
+            {
+                lastSentWeaponIndex = idx;
+                CmdUpdateWeapon(idx);
+            }
+        }
+    }
+
+    // ─── Animation sync Commands / hooks ───────────────────────────────────────
+
+    [Command]
+    private void CmdUpdateAnimState(float speed, bool shooting)
+    {
+        syncSpeed      = speed;
+        syncIsShooting = shooting;
+    }
+
+    private void OnSyncSpeedChanged(float old, float newVal)
+    {
+        if (isLocalPlayer) return;
+        if (thirdPersonAnimator == null && thirdPersonModel != null)
+            thirdPersonAnimator = thirdPersonModel.GetComponentInChildren<Animator>(true);
+        thirdPersonAnimator?.SetFloat(HashSpeed, newVal);
+    }
+
+    private void OnSyncShootingChanged(bool old, bool newVal)
+    {
+        if (isLocalPlayer) return;
+        if (thirdPersonAnimator == null && thirdPersonModel != null)
+            thirdPersonAnimator = thirdPersonModel.GetComponentInChildren<Animator>(true);
+        thirdPersonAnimator?.SetBool(HashIsShooting, newVal);
+    }
+
+    // ─── Weapon sync Commands / hooks ─────────────────────────────────────────
+
+    [Command]
+    private void CmdUpdateWeapon(int index) => syncWeaponIndex = index;
+
+    private void OnWeaponIndexSynced(int old, int newVal)
+    {
+        if (isLocalPlayer) return;
+        UpdateThirdPersonWeaponVisual(newVal);
+    }
+
+    private void UpdateThirdPersonWeaponVisual(int weaponIndex)
+    {
+        if (thirdPersonGun == null) return;
+        // index 3 = knife (no visible gun prop); every other weapon shows the rifle
+        bool showGun = weaponIndex != 3;
+        foreach (var r in thirdPersonGun.GetComponentsInChildren<Renderer>(true))
+            r.enabled = showGun;
     }
 
     // ─── Tracer sync (so other clients see this player's gunshots) ─────────────
+
     public void BroadcastTracer(Vector3 from, Vector3 to)
     {
         if (!isLocalPlayer) return;
@@ -126,24 +190,16 @@ public class NetworkedPlayer : NetworkBehaviour
     }
 
     [Command]
-    private void CmdSpawnTracer(Vector3 from, Vector3 to)
-    {
-        RpcSpawnTracer(from, to);
-    }
+    private void CmdSpawnTracer(Vector3 from, Vector3 to) => RpcSpawnTracer(from, to);
 
     [ClientRpc(includeOwner = false)]
-    private void RpcSpawnTracer(Vector3 from, Vector3 to)
-    {
-        // The local shooter already drew its own tracer; only remote clients render here.
-        BulletEffects.SpawnTracer(from, to);
-    }
+    private void RpcSpawnTracer(Vector3 from, Vector3 to) => BulletEffects.SpawnTracer(from, to);
 
-    // Called by Weapon on the LOCAL shooter when their raycast hits another player.
-    // Routes the request to the server, which is the authority for health changes.
+    // ─── Damage routing ────────────────────────────────────────────────────────
+
     public void RequestDamage(GameObject hitObject, int damage, bool isHeadshot)
     {
-        if (!isLocalPlayer) return;
-        if (hitObject == null) return;
+        if (!isLocalPlayer || hitObject == null) return;
         var targetIdentity = hitObject.GetComponentInParent<NetworkIdentity>();
         if (targetIdentity == null) return;
         CmdApplyDamage(targetIdentity, damage, isHeadshot);
@@ -155,5 +211,27 @@ public class NetworkedPlayer : NetworkBehaviour
         if (target == null) return;
         var ph = target.GetComponent<PlayerHealth>();
         if (ph != null) ph.TakeDamage(damage, isHeadshot);
+    }
+
+    // ─── Server-driven respawn (called by NetworkLobby after the delay) ────────
+
+    [ClientRpc]
+    public void RpcRespawnAt(Vector3 pos, Quaternion rot)
+    {
+        if (!isLocalPlayer) return;
+
+        CharacterController cc = GetComponent<CharacterController>();
+        if (cc) cc.enabled = false;
+        transform.position = pos;
+        transform.rotation = rot;
+        if (cc) cc.enabled = true;
+
+        var pm = GetComponent<PlayerMovement>();
+        var wm = GetComponent<WeaponManager>();
+        if (pm) pm.enabled = true;
+        if (wm) wm.enabled = true;
+
+        MouseLook ml = GetComponentInChildren<MouseLook>();
+        if (ml) ml.ResetLook();
     }
 }

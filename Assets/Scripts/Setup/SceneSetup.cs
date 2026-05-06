@@ -292,13 +292,15 @@ public class SceneSetup : MonoBehaviour
         hud.playerHealth = health;
         hud.weaponManager = wm;
 
-        // Death handler — disable controls so the player can't move/shoot while dead
+        // Death handler — disable controls so the player can't move/shoot while dead.
+        // In LAN mode: NetworkLobby handles score tracking and server-side respawn.
+        // In offline mode: handle scoring and respawn locally.
         health.onDeath.AddListener(() =>
         {
             player.GetComponent<PlayerMovement>().enabled = false;
             player.GetComponent<WeaponManager>().enabled = false;
 
-            if (GameManager.Instance)
+            if (!NetworkLobby.IsLanActive && GameManager.Instance)
             {
                 GameManager.Instance.AddEnemyKill();
                 Invoke(nameof(RespawnPlayer), 3f);

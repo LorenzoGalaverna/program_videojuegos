@@ -52,8 +52,22 @@ public class PlayerHealth : NetworkBehaviour
         if (currentHealth <= 0 && !isDead)
         {
             isDead = true;
-            // In offline mode the SyncVar hook won't fire, so call the event directly.
-            if (!IsNetworked()) onDeath?.Invoke();
+            if (!IsNetworked())
+            {
+                // Offline: SyncVar hook won't fire, so invoke directly.
+                onDeath?.Invoke();
+            }
+            else if (isServer)
+            {
+                // LAN: notify NetworkLobby for score tracking and server-side respawn.
+                // Only for actual players (NetworkedPlayer), not bots.
+                if (GetComponent<NetworkedPlayer>() != null &&
+                    Mirror.NetworkManager.singleton is NetworkLobby lobby)
+                {
+                    NetworkIdentity ni = GetComponent<NetworkIdentity>();
+                    if (ni != null) lobby.OnPlayerDied(ni);
+                }
+            }
         }
         if (!IsNetworked()) onHealthChanged?.Invoke(currentHealth, 0);
     }
