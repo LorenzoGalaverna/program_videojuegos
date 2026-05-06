@@ -103,11 +103,10 @@ public class PlayerMovement : MonoBehaviour
         if (Input.GetButtonDown("Jump") && isGrounded && !isCrouching)
             velocity.y = Mathf.Sqrt(jumpForce * -2f * gravity);
 
-        // Crouch — hold Ctrl to stay crouched, release to stand up.
-        bool wantCrouch = Input.GetKey(KeyCode.LeftControl);
-        if (wantCrouch != isCrouching)
+        // Crouch toggle: press Ctrl once to crouch, press again to stand up.
+        if (Input.GetKeyDown(KeyCode.LeftControl))
         {
-            isCrouching = wantCrouch;
+            isCrouching = !isCrouching;
             controller.height = isCrouching ? crouchHeight : originalHeight;
             controller.center = isCrouching
                 ? new Vector3(0, crouchHeight / 2f, 0)

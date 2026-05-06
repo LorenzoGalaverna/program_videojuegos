@@ -67,10 +67,7 @@ public class GameManager : MonoBehaviour
         onScoreChanged?.Invoke(playerScore, enemyScore);
 
         if (playerScore >= killsToWin)
-        {
-            onGameMessage?.Invoke("YOU WIN!");
             EndGame();
-        }
     }
 
     public void AddEnemyKill()
@@ -80,10 +77,7 @@ public class GameManager : MonoBehaviour
         onScoreChanged?.Invoke(playerScore, enemyScore);
 
         if (enemyScore >= killsToWin)
-        {
-            onGameMessage?.Invoke("YOU LOSE!");
             EndGame();
-        }
     }
 
     public void EndGame()
@@ -91,12 +85,13 @@ public class GameManager : MonoBehaviour
         gameActive = false;
         onGameOver?.Invoke();
 
+        // Single message — no duplicates from AddPlayerKill/AddEnemyKill
         if (playerScore > enemyScore)
-            onGameMessage?.Invoke("VICTORY!");
+            onGameMessage?.Invoke("VICTORIA!");
         else if (enemyScore > playerScore)
-            onGameMessage?.Invoke("DEFEAT!");
+            onGameMessage?.Invoke("DERROTA!");
         else
-            onGameMessage?.Invoke("DRAW!");
+            onGameMessage?.Invoke("EMPATE!");
     }
 
     public Transform GetSpawnPoint(int team)

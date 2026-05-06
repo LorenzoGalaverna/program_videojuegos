@@ -29,12 +29,17 @@ public class GameHUD : MonoBehaviour
     private int playerScore;
     private int enemyScore;
     private float gameTime;
+    private bool gameOver;
+    private string gameOverMessage = "";
 
     // Styles
     private GUIStyle healthStyle;
     private GUIStyle ammoStyle;
     private GUIStyle messageStyle;
     private GUIStyle scoreStyle;
+    private GUIStyle reloadStyle;
+    private GUIStyle gameOverStyle;
+    private GUIStyle gameOverSubStyle;
     private bool stylesInit;
 
     // Hit marker
@@ -63,6 +68,7 @@ public class GameHUD : MonoBehaviour
 
         GameManager.Instance.onScoreChanged.AddListener((p, e) => { playerScore = p; enemyScore = e; });
         GameManager.Instance.onGameMessage.AddListener(ShowMessage);
+        GameManager.Instance.onGameOver.AddListener(OnGameOver);
         gmListenersAttached = true;
     }
 
@@ -72,6 +78,27 @@ public class GameHUD : MonoBehaviour
         if (hitMarkerTimer > 0) hitMarkerTimer -= Time.deltaTime;
         TryAttachGameManagerListeners();
         if (GameManager.Instance) gameTime = GameManager.Instance.CurrentTime;
+
+        // Check hitmarker from weapon (covers all weapon types)
+        if (weaponManager != null && weaponManager.CurrentWeapon != null)
+        {
+            if (Time.time - weaponManager.CurrentWeapon.lastHitTime < 0.18f)
+                hitMarkerTimer = 0.18f;
+        }
+
+        // ESC on end-game screen returns to main menu
+        if (gameOver && Input.GetKeyDown(KeyCode.Escape))
+        {
+            MainMenu menu = FindAnyObjectByType<MainMenu>();
+            if (menu != null) menu.ShowMenu();
+        }
+    }
+
+    private void OnGameOver()
+    {
+        gameOver = true;
+        gameOverMessage = gameMessage; // capture final message (VICTORIA / DERROTA / EMPATE)
+        // Show scores in the sub-line
     }
 
     private void InitStyles()
@@ -106,12 +133,42 @@ public class GameHUD : MonoBehaviour
         };
         scoreStyle.normal.textColor = Color.white;
 
+        reloadStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 18,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        reloadStyle.normal.textColor = Color.yellow;
+
+        gameOverStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 64,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        gameOverStyle.normal.textColor = Color.white;
+
+        gameOverSubStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 28,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        gameOverSubStyle.normal.textColor = new Color(1f, 1f, 0.4f);
+
         stylesInit = true;
     }
 
     void OnGUI()
     {
         if (!stylesInit) InitStyles();
+
+        if (gameOver)
+        {
+            DrawGameOverScreen();
+            return;
+        }
 
         DrawCrosshair();
         DrawHealthArmor();
@@ -123,17 +180,49 @@ public class GameHUD : MonoBehaviour
         DrawReloadIndicator();
     }
 
+    private void DrawGameOverScreen()
+    {
+        // Semi-transparent black overlay
+        Color prev = GUI.color;
+        GUI.color = new Color(0f, 0f, 0f, 0.75f);
+        GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), GetLineTex());
+        GUI.color = prev;
+
+        // Main result text
+        float cy = Screen.height * 0.4f;
+        GUI.Label(new Rect(0, cy, Screen.width, 80), gameOverMessage, gameOverStyle);
+
+        // Final score
+        GUI.Label(new Rect(0, cy + 90, Screen.width, 40),
+            $"{playerScore}  -  {enemyScore}", gameOverSubStyle);
+
+        // Press any key hint
+        gameOverSubStyle.fontSize = 18;
+        gameOverSubStyle.normal.textColor = new Color(1f, 1f, 1f, 0.6f);
+        GUI.Label(new Rect(0, cy + 140, Screen.width, 30),
+            "Presioná ESC para volver al menú", gameOverSubStyle);
+        gameOverSubStyle.fontSize = 28;
+        gameOverSubStyle.normal.textColor = new Color(1f, 1f, 0.4f);
+    }
+
     private void DrawCrosshair()
     {
         float cx = Screen.width / 2f;
         float cy = Screen.height / 2f;
         Color c = crosshairColor;
 
-        // Dynamic spread (widen when shooting)
+        // Dynamic gap: expands with weapon spread
         float gap = crosshairGap;
-        if (weaponManager && weaponManager.CurrentWeapon != null)
+        if (weaponManager != null && weaponManager.CurrentWeapon != null)
         {
-            // Make crosshair bigger based on current weapon spread
+            WeaponData d = weaponManager.CurrentWeapon.data;
+            if (d != null)
+            {
+                // Map spread range to extra gap pixels (0 at base spread, +20 at max spread)
+                float spreadT = Mathf.InverseLerp(d.baseSpread, d.maxSpread,
+                    weaponManager.CurrentWeapon.CurrentSpread);
+                gap = crosshairGap + spreadT * 20f;
+            }
         }
 
         DrawLine(cx - crosshairSize - gap, cy, cx - gap, cy, crosshairThickness, c); // left
@@ -149,11 +238,9 @@ public class GameHUD : MonoBehaviour
     {
         float y = Screen.height - 60;
 
-        // Health
         healthStyle.normal.textColor = displayHealth > 30 ? healthColor : dangerColor;
         GUI.Label(new Rect(20, y, 200, 40), $"HP: {displayHealth}", healthStyle);
 
-        // Armor
         if (displayArmor > 0)
         {
             healthStyle.normal.textColor = armorColor;
@@ -169,7 +256,6 @@ public class GameHUD : MonoBehaviour
         ammoStyle.normal.textColor = displayMag > 0 ? ammoColor : dangerColor;
         GUI.Label(new Rect(x, y, 200, 40), $"{displayMag} / {displayReserve}", ammoStyle);
 
-        // Weapon name
         ammoStyle.fontSize = 16;
         ammoStyle.normal.textColor = new Color(1, 1, 1, 0.6f);
         GUI.Label(new Rect(x, y - 25, 200, 25), weaponName, ammoStyle);
@@ -220,9 +306,8 @@ public class GameHUD : MonoBehaviour
     {
         if (weaponManager && weaponManager.CurrentWeapon != null && weaponManager.CurrentWeapon.IsReloading)
         {
-            GUI.Label(new Rect(Screen.width / 2 - 50, Screen.height / 2 + 30, 100, 25), "RELOADING...",
-                new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold,
-                    normal = { textColor = Color.yellow } });
+            GUI.Label(new Rect(Screen.width / 2 - 60, Screen.height / 2 + 30, 120, 25),
+                "RECARGANDO...", reloadStyle);
         }
     }
 
@@ -237,9 +322,19 @@ public class GameHUD : MonoBehaviour
     // Helper drawing methods
     private static Texture2D lineTex;
 
+    private static Texture2D GetLineTex()
+    {
+        if (!lineTex)
+        {
+            lineTex = new Texture2D(1, 1);
+            lineTex.SetPixel(0, 0, Color.white);
+            lineTex.Apply();
+        }
+        return lineTex;
+    }
+
     private void DrawLine(float x1, float y1, float x2, float y2, float thickness, Color color)
     {
-        if (!lineTex) { lineTex = new Texture2D(1, 1); }
         Color prev = GUI.color;
         GUI.color = color;
 
@@ -247,7 +342,7 @@ public class GameHUD : MonoBehaviour
         float length = Vector2.Distance(new Vector2(x1, y1), new Vector2(x2, y2));
 
         GUIUtility.RotateAroundPivot(angle, new Vector2(x1, y1));
-        GUI.DrawTexture(new Rect(x1, y1 - thickness / 2, length, thickness), lineTex);
+        GUI.DrawTexture(new Rect(x1, y1 - thickness / 2, length, thickness), GetLineTex());
         GUIUtility.RotateAroundPivot(-angle, new Vector2(x1, y1));
 
         GUI.color = prev;
@@ -255,10 +350,9 @@ public class GameHUD : MonoBehaviour
 
     private void DrawRect(float x, float y, float w, float h, Color color)
     {
-        if (!lineTex) { lineTex = new Texture2D(1, 1); }
         Color prev = GUI.color;
         GUI.color = color;
-        GUI.DrawTexture(new Rect(x, y, w, h), lineTex);
+        GUI.DrawTexture(new Rect(x, y, w, h), GetLineTex());
         GUI.color = prev;
     }
 }

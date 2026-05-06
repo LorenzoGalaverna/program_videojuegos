@@ -24,8 +24,11 @@ public class Weapon : MonoBehaviour
     private float currentRecoilX;
     private float currentRecoilY;
 
-    // Used by HUD to flash a hitmarker for knife hits
+    // Used by HUD and WeaponManager to flash a hitmarker on any weapon hit
     public float lastHitTime = -10f;
+
+    // Cached to avoid per-shot GetComponentInParent calls
+    private PlayerMovement cachedPlayerMovement;
 
     // Extra impact sound for knife flesh hits (set in SceneSetup)
     public AudioClip knifeFleshHitSound;
@@ -42,6 +45,8 @@ public class Weapon : MonoBehaviour
         currentReserve = data.reserveAmmo;
         currentSpread = data.baseSpread;
         onAmmoChanged?.Invoke(currentMagazine, currentReserve);
+
+        cachedPlayerMovement = GetComponentInParent<PlayerMovement>();
 
         // Force-load audio data at startup so the first shot doesn't pay decompression cost.
         // Also detect any leading silence in each clip so playback can skip past it —
@@ -112,11 +117,9 @@ public class Weapon : MonoBehaviour
         nextFireTime = Time.time + data.fireRate;
         onAmmoChanged?.Invoke(currentMagazine, currentReserve);
 
-        // Spread calculation. Crouching halves spread (better accuracy when stable),
-        // walking with Shift keeps it normal, running adds nothing extra here.
+        // Spread calculation. Crouching halves spread (better accuracy when stable).
         float spreadModifier = 1f;
-        PlayerMovement playerMov = GetComponentInParent<PlayerMovement>();
-        if (playerMov != null && playerMov.IsCrouching)
+        if (cachedPlayerMovement != null && cachedPlayerMovement.IsCrouching)
             spreadModifier = 0.5f;
 
         Vector3 spreadDir = cameraTransform.forward;
@@ -158,12 +161,9 @@ public class Weapon : MonoBehaviour
 
             if (data.weaponType == WeaponType.Knife)
             {
-                // Knife hit: spawn slash effect at the hit point and notify HUD for hitmarker
                 BulletEffects.SpawnKnifeHit(hitInfo, targetHealth != null);
-                lastHitTime = Time.time;
 
                 // Extra impact sound only for flesh hits — wall hits just use the swoosh.
-                // PlayOneShot here so it layers on top of the swoosh that just started.
                 if (targetHealth != null && audioSource && knifeFleshHitSound != null)
                     audioSource.PlayOneShot(knifeFleshHitSound);
             }
@@ -174,8 +174,10 @@ public class Weapon : MonoBehaviour
 
             if (targetHealth != null)
             {
-                // In networked play we route damage through the local NetworkedPlayer's
-                // Command — the server is the authority. Offline we apply directly.
+                // Flash hitmarker for any weapon that hits an enemy
+                lastHitTime = Time.time;
+
+                // In networked play route damage through the local NetworkedPlayer's Command.
                 NetworkedPlayer myNet = GetComponentInParent<NetworkedPlayer>();
                 if (myNet != null && myNet.isLocalPlayer)
                     myNet.RequestDamage(hitInfo.collider.gameObject, data.damage, isHeadshot);
@@ -224,4 +226,5 @@ public class Weapon : MonoBehaviour
     public int CurrentMagazine => currentMagazine;
     public int CurrentReserve => currentReserve;
     public bool IsReloading => isReloading;
+    public float CurrentSpread => currentSpread;
 }

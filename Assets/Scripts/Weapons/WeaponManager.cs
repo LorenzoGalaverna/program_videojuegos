@@ -303,14 +303,15 @@ public class WeaponManager : MonoBehaviour
 
     private void HandleRecoil()
     {
-        // Exponential decay toward zero. The kick was applied instantly at shoot time;
-        // this just snaps the camera back. Frame-rate independent thanks to (1 - exp).
+        // Exponential decay toward zero. MouseLook reads RecoilX/Y and adds them
+        // to its own pitch so both systems share the same localRotation write.
         float k = 1f - Mathf.Exp(-recoilRecoverRate * Time.deltaTime);
         currentRecoil = Vector2.Lerp(currentRecoil, Vector2.zero, k);
-
-        // Apply recoil as camera offset (not cumulative rotation, so it never drifts)
-        cameraTransform.localRotation = Quaternion.Euler(-currentRecoil.x, currentRecoil.y, 0f);
+        // Do NOT write cameraTransform.localRotation here — MouseLook owns that.
     }
+
+    public float RecoilX => currentRecoil.x;
+    public float RecoilY => currentRecoil.y;
 
     public void SwitchWeapon(int index)
     {
@@ -324,6 +325,9 @@ public class WeaponManager : MonoBehaviour
             weaponVisualsHidden = false;
             currentWeapon.gameObject.SetActive(false);
         }
+
+        // Clear recoil so the new weapon doesn't inherit leftover kick
+        currentRecoil = Vector2.zero;
 
         currentWeaponIndex = index;
         currentWeapon = weapons[currentWeaponIndex];

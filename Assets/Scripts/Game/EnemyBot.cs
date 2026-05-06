@@ -4,16 +4,18 @@ using UnityEngine.AI;
 public class EnemyBot : MonoBehaviour
 {
     [Header("Detección")]
-    public float detectionRange = 30f;
+    public float detectionRange = 40f;
     public float attackRange = 18f;
     public float fieldOfView = 120f;
-    public float reactionTime = 0.3f;
+    public float reactionTime = 0.4f;
 
     [Header("Combate")]
     public int damage = 15;
     public float fireRate = 0.4f;
     public float aimSmoothing = 6f;
-    public float accuracy = 0.7f;
+    public float accuracy = 0.65f;
+    [Tooltip("Shots per burst before the bot pauses")]
+    public int burstSize = 4;
 
     [Header("Patrulla")]
     public float patrolRadius = 12f;
@@ -44,6 +46,10 @@ public class EnemyBot : MonoBehaviour
     private float patrolWaitTimer;
     private float reactionTimer;
     private Vector3 lastKnownPlayerPos;
+
+    // Burst fire tracking
+    private int burstShotsFired;
+    private bool inBurstPause;
 
     void Start()
     {
@@ -165,6 +171,9 @@ public class EnemyBot : MonoBehaviour
         {
             agent.isStopped = true;
             reactionTimer = reactionTime;
+            // Reset burst so the bot starts fresh each engagement
+            burstShotsFired = 0;
+            inBurstPause = false;
         }
         else
         {
@@ -221,11 +230,28 @@ public class EnemyBot : MonoBehaviour
             return;
         }
 
-        // Fire at fire rate
+        // Burst fire: shoot burstSize times, then pause for fireRate * 4 seconds
+        if (inBurstPause)
+        {
+            if (Time.time >= nextFireTime)
+                inBurstPause = false;
+            return;
+        }
+
         if (Time.time >= nextFireTime)
         {
             Shoot();
-            nextFireTime = Time.time + fireRate;
+            burstShotsFired++;
+            if (burstShotsFired >= burstSize)
+            {
+                burstShotsFired = 0;
+                inBurstPause = true;
+                nextFireTime = Time.time + fireRate * 4f;
+            }
+            else
+            {
+                nextFireTime = Time.time + fireRate;
+            }
         }
     }
 

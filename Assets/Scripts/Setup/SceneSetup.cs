@@ -263,6 +263,7 @@ public class SceneSetup : MonoBehaviour
         // Mouse Look
         MouseLook mouseLook = camHolder.AddComponent<MouseLook>();
         mouseLook.playerBody = player.transform;
+        // weaponManager assigned below after WeaponManager is created
 
         // Weapon Holder - positioned to bottom-right of view
         GameObject weaponHolder = new GameObject("WeaponHolder");
@@ -283,30 +284,41 @@ public class SceneSetup : MonoBehaviour
         wm.weapons = new Weapon[] { pistol, rifle, sniper, knife };
         wm.startWeaponIndex = 1; // Start with rifle
 
+        // Give MouseLook a reference to WeaponManager so it can incorporate recoil
+        mouseLook.weaponManager = wm;
+
         // HUD
         GameHUD hud = player.AddComponent<GameHUD>();
         hud.playerHealth = health;
         hud.weaponManager = wm;
 
-        // Death handler
+        // Death handler — disable controls so the player can't move/shoot while dead
         health.onDeath.AddListener(() =>
         {
+            player.GetComponent<PlayerMovement>().enabled = false;
+            player.GetComponent<WeaponManager>().enabled = false;
+
             if (GameManager.Instance)
             {
                 GameManager.Instance.AddEnemyKill();
-                // Respawn after 3 seconds
-                Invoke("RespawnPlayer", 3f);
+                Invoke(nameof(RespawnPlayer), 3f);
             }
         });
     }
 
     private void RespawnPlayer()
     {
+        // Don't respawn if the game already ended
+        if (GameManager.Instance != null && !GameManager.Instance.GameActive) return;
+
         GameObject player = GameObject.FindGameObjectWithTag("Player");
-        if (player && GameManager.Instance)
-        {
-            GameManager.Instance.RespawnPlayer(player, 0);
-        }
+        if (player == null || GameManager.Instance == null) return;
+
+        GameManager.Instance.RespawnPlayer(player, 0);
+
+        // Re-enable controls after respawn
+        player.GetComponent<PlayerMovement>().enabled = true;
+        player.GetComponent<WeaponManager>().enabled = true;
     }
 
     private Weapon CreateWeaponObject(string name, Transform parent, WeaponType type)

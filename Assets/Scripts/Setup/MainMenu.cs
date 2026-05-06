@@ -197,6 +197,15 @@ public class MainMenu : MonoBehaviour
         networkLobby.StartClientMode(ipInput);
     }
 
+    // Called by GameHUD when the player presses ESC on the end-game screen
+    public void ShowMenu()
+    {
+        menuVisible = true;
+        lanScreen = false;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
     // FindAnyObjectByType misses the NetworkLobby once Mirror moves it to
     // DontDestroyOnLoad. Use the NetworkManager singleton, which Mirror keeps
     // as a static reference, and fall back to includeInactive lookup.
