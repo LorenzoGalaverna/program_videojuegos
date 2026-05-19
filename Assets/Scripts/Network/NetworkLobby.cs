@@ -152,7 +152,15 @@ public class NetworkLobby : NetworkManager
         int slot = spawnedPlayers.IndexOf(player);
         int team = slot >= 0 ? slot % 2 : 0;
         Transform sp = GameManager.Instance.GetSpawnPoint(team);
-        if (sp != null) np.RpcRespawnAt(sp.position, sp.rotation);
+        if (sp != null)
+        {
+            // Reset position on the server's authoritative transform first so
+            // NetworkTransform's next replication won't push the burrowed corpse
+            // position back out to clients.
+            player.transform.position = sp.position;
+            player.transform.rotation = sp.rotation;
+            np.RpcRespawnAt(sp.position, sp.rotation);
+        }
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────────

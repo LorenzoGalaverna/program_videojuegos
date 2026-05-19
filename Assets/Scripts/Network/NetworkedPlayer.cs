@@ -11,6 +11,8 @@ public class NetworkedPlayer : NetworkBehaviour
     public GameObject thirdPersonModel;
     [Tooltip("Scale of the 3rd-person model as seen by other players (1 = original).")]
     public float thirdPersonScale = 1f;
+    [Tooltip("Vertical offset for the visible model so feet sit flush with the floor (compensates CharacterController skinWidth).")]
+    public float modelGroundOffset = -0.08f;
 
     // Assigned by NetworkLobby when this player is spawned (0 = first/host, 1 = joiner)
     [SyncVar] public int SpawnSlot;
@@ -65,6 +67,14 @@ public class NetworkedPlayer : NetworkBehaviour
         // Listen for death so every client plays the dying animation locally.
         var ph = GetComponent<PlayerHealth>();
         if (ph != null) ph.onDeath.AddListener(PlayDeathAnimation);
+
+        // Apply the ground-offset so the visible model's feet sit on the floor.
+        if (thirdPersonModel != null)
+        {
+            Vector3 lp = thirdPersonModel.transform.localPosition;
+            lp.y = modelGroundOffset;
+            thirdPersonModel.transform.localPosition = lp;
+        }
 
         if (!isLocalPlayer)
         {
@@ -136,9 +146,10 @@ public class NetworkedPlayer : NetworkBehaviour
         thirdPersonAnimator.SetBool(HashIsShooting, syncIsShooting);
 
         // Crouch visual: lower the 3rd-person model on Y when the owner is crouched.
+        // Target relative to the base modelGroundOffset so the feet still rest flush.
         if (thirdPersonModel != null)
         {
-            float targetY = syncIsCrouching ? -0.5f : 0f;
+            float targetY = syncIsCrouching ? modelGroundOffset - 0.5f : modelGroundOffset;
             Vector3 lp = thirdPersonModel.transform.localPosition;
             lp.y = Mathf.Lerp(lp.y, targetY, 10f * Time.deltaTime);
             thirdPersonModel.transform.localPosition = lp;
@@ -286,6 +297,8 @@ public class NetworkedPlayer : NetworkBehaviour
         if (ph != null) ph.TakeDamage(damage, isHeadshot);
     }
 
+    private bool isDeadVisual;
+
     private void PlayDeathAnimation()
     {
         if (thirdPersonAnimator == null && thirdPersonModel != null)
@@ -296,30 +309,113 @@ public class NetworkedPlayer : NetworkBehaviour
         thirdPersonAnimator.SetFloat(HashSpeed, 0f);
         thirdPersonAnimator.SetBool(HashIsShooting, false);
         thirdPersonAnimator.SetTrigger(HashDie);
+        thirdPersonAnimator.applyRootMotion = true;
 
-        // Make the local player visible so they can see themselves go down.
-        if (isLocalPlayer && thirdPersonModel != null)
+        isDeadVisual = true;
+
+        if (isLocalPlayer)
         {
-            foreach (var rend in thirdPersonModel.GetComponentsInChildren<Renderer>())
-                rend.enabled = true;
+            // Show our own corpse + disable input so we can't keep shooting/moving while dead.
+            if (thirdPersonModel != null)
+                foreach (var rend in thirdPersonModel.GetComponentsInChildren<Renderer>())
+                    rend.enabled = true;
+
+            var pm = GetComponent<PlayerMovement>();
+            var wm = GetComponent<WeaponManager>();
+            var hud = GetComponent<GameHUD>();
+            if (pm)  pm.enabled = false;
+            if (wm)  wm.enabled = false;
+            if (hud) hud.enabled = false;        // hides crosshair + ammo HUD
+
+            StartCoroutine(DropCameraOnDeath());
         }
     }
+
+    // Smoothly lowers and tilts the camera so dying "feels" like collapsing to the floor.
+    private System.Collections.IEnumerator DropCameraOnDeath()
+    {
+        Transform camHolder = transform.Find("CameraHolder");
+        if (camHolder == null) yield break;
+
+        Vector3 startPos = camHolder.localPosition;
+        Vector3 endPos   = new Vector3(startPos.x, 0.25f, startPos.z);
+        Quaternion startRot = camHolder.localRotation;
+        Quaternion endRot   = Quaternion.Euler(70f, startRot.eulerAngles.y, 5f);
+
+        const float duration = 1.2f;
+        float t = 0f;
+        while (t < duration && isDeadVisual)
+        {
+            t += Time.deltaTime;
+            float k = Mathf.SmoothStep(0f, 1f, t / duration);
+            camHolder.localPosition = Vector3.Lerp(startPos, endPos, k);
+            camHolder.localRotation = Quaternion.Slerp(startRot, endRot, k);
+            yield return null;
+        }
+    }
+
+    void OnGUI()
+    {
+        if (!isLocalPlayer || !isDeadVisual) return;
+
+        // Dark vignette
+        if (deathOverlay == null)
+        {
+            deathOverlay = new Texture2D(1, 1);
+            deathOverlay.SetPixel(0, 0, new Color(0.3f, 0f, 0f, 0.55f));
+            deathOverlay.Apply();
+        }
+        GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), deathOverlay);
+
+        GUIStyle big = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 72,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        big.normal.textColor = new Color(1f, 0.2f, 0.2f);
+        GUI.Label(new Rect(0, Screen.height / 2f - 80, Screen.width, 100), "ELIMINADO", big);
+
+        GUIStyle sub = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 22,
+            alignment = TextAnchor.MiddleCenter
+        };
+        sub.normal.textColor = new Color(1f, 1f, 1f, 0.75f);
+        GUI.Label(new Rect(0, Screen.height / 2f + 10, Screen.width, 40), "Reapareciendo en unos segundos…", sub);
+    }
+    private static Texture2D deathOverlay;
 
     // ─── Server-driven respawn (called by NetworkLobby after the delay) ────────
 
     [ClientRpc]
     public void RpcRespawnAt(Vector3 pos, Quaternion rot)
     {
-        // Reset animator on every client so the dying clip is cleared.
+        // Reset animator on every client so the dying clip is cleared, and turn
+        // root motion back off so it can't drag the player around going forward.
         if (thirdPersonAnimator == null && thirdPersonModel != null)
             thirdPersonAnimator = thirdPersonModel.GetComponentInChildren<Animator>(true);
         if (thirdPersonAnimator != null)
         {
+            thirdPersonAnimator.applyRootMotion = false;
             thirdPersonAnimator.ResetTrigger(HashDie);
             thirdPersonAnimator.SetFloat(HashSpeed, 0f);
             thirdPersonAnimator.SetBool(HashIsShooting, false);
             // Force the controller back to the idle state so the death clip doesn't linger.
             thirdPersonAnimator.Play("rifle aiming idle", 0, 0f);
+            // Reset any residual offset that the dying animation (with root motion) left
+            // on BOTH the ThirdPersonModel parent and the Animator's own GameObject.
+            // Skipping the inner one is what caused the burrow-on-each-death bug.
+            if (thirdPersonModel != null)
+            {
+                thirdPersonModel.transform.localPosition = new Vector3(0, modelGroundOffset, 0);
+                thirdPersonModel.transform.localRotation = Quaternion.identity;
+            }
+            if (thirdPersonAnimator != null)
+            {
+                thirdPersonAnimator.transform.localPosition = Vector3.zero;
+                thirdPersonAnimator.transform.localRotation = Quaternion.identity;
+            }
         }
 
         if (!isLocalPlayer)
@@ -328,11 +424,22 @@ public class NetworkedPlayer : NetworkBehaviour
             return;
         }
 
-        // Local: re-hide our 3rd-person body and move ourselves to the spawn position.
+        // Local: clear the death state, re-hide our 3rd-person body, restore HUD/input,
+        // restore the camera to standing position, and move to the spawn point.
+        isDeadVisual = false;
+
         if (thirdPersonModel != null)
         {
             foreach (var rend in thirdPersonModel.GetComponentsInChildren<Renderer>())
                 rend.enabled = false;
+        }
+
+        // Reset the camera holder so it isn't still tilted/dropped from the death anim.
+        Transform camHolder = transform.Find("CameraHolder");
+        if (camHolder != null)
+        {
+            camHolder.localPosition = new Vector3(0, 1.7f, 0);
+            camHolder.localRotation = Quaternion.identity;
         }
 
         CharacterController cc = GetComponent<CharacterController>();
@@ -341,10 +448,12 @@ public class NetworkedPlayer : NetworkBehaviour
         transform.rotation = rot;
         if (cc) cc.enabled = true;
 
-        var pm = GetComponent<PlayerMovement>();
-        var wm = GetComponent<WeaponManager>();
-        if (pm) pm.enabled = true;
-        if (wm) wm.enabled = true;
+        var pm  = GetComponent<PlayerMovement>();
+        var wm  = GetComponent<WeaponManager>();
+        var hud = GetComponent<GameHUD>();
+        if (pm)  pm.enabled  = true;
+        if (wm)  wm.enabled  = true;
+        if (hud) hud.enabled = true;
 
         MouseLook ml = GetComponentInChildren<MouseLook>();
         if (ml) ml.ResetLook();
