@@ -78,19 +78,22 @@ public class NetworkedPlayer : NetworkBehaviour
 
         float scale = Mathf.Max(thirdPersonScale, 0.5f);
 
+        // Body covers torso+legs only. Capsule top sits BELOW the neck so head shots
+        // aren't intercepted by the body collider (which would always be the closer hit).
         GameObject body = new GameObject("BodyHitbox");
         body.transform.SetParent(transform, false);
-        body.transform.localPosition = new Vector3(0, 1f * scale, 0);
+        body.transform.localPosition = new Vector3(0, 0.8f * scale, 0);
         var capsule = body.AddComponent<CapsuleCollider>();
-        capsule.height = 1.8f * scale;
-        capsule.radius = 0.4f * scale;
+        capsule.height = 1.4f * scale;          // extends to ~1.5 * scale at the top
+        capsule.radius = 0.35f * scale;
 
+        // Head sits clearly above the body capsule
         GameObject head = new GameObject("Head");
         head.tag = "Head";
         head.transform.SetParent(transform, false);
-        head.transform.localPosition = new Vector3(0, 1.75f * scale, 0);
+        head.transform.localPosition = new Vector3(0, 1.7f * scale, 0);
         var sphere = head.AddComponent<SphereCollider>();
-        sphere.radius = 0.18f * scale;
+        sphere.radius = 0.22f * scale;
     }
 
     private void WarpToSpawn() { /* position is set server-side in OnServerAddPlayer */ }

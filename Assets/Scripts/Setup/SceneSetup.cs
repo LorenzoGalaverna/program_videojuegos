@@ -650,13 +650,15 @@ public class SceneSetup : MonoBehaviour
         Destroy(visor.GetComponent<Collider>());
         visor.GetComponent<Renderer>().material = accentMat;
 
-        // Body hitbox (separate so headshot tag works on head only)
+        // Body hitbox — sized so it ends BELOW the head sphere. If the capsule reaches
+        // into the head's Y range it gets hit first by horizontal raycasts and headshots
+        // never trigger.
         GameObject hitbox = new GameObject("BodyHitbox");
         hitbox.transform.parent = bot.transform;
-        hitbox.transform.localPosition = new Vector3(0, 1f, 0);
+        hitbox.transform.localPosition = new Vector3(0, 0.8f, 0);
         CapsuleCollider hitCol = hitbox.AddComponent<CapsuleCollider>();
-        hitCol.height = 1.8f;
-        hitCol.radius = 0.4f;
+        hitCol.height = 1.4f;
+        hitCol.radius = 0.35f;
 
         // Bot's gun (visible in 3rd person)
         GameObject botGun = new GameObject("BotGun");
@@ -783,21 +785,21 @@ public class SceneSetup : MonoBehaviour
             BuildRifleModel(botGun.transform, gunMat, accentMat, 1.2f);
         }
 
-        // Body hitbox (capsule covering the prefab)
+        // Body hitbox — capsule top stays below the head sphere so headshots work.
         GameObject hitbox = new GameObject("BodyHitbox");
         hitbox.transform.parent = bot.transform;
-        hitbox.transform.localPosition = new Vector3(0, 1f, 0);
+        hitbox.transform.localPosition = new Vector3(0, 0.8f, 0);
         CapsuleCollider hitCol = hitbox.AddComponent<CapsuleCollider>();
-        hitCol.height = 1.8f;
-        hitCol.radius = 0.4f;
+        hitCol.height = 1.4f;
+        hitCol.radius = 0.35f;
 
-        // Head hitbox (for headshots)
+        // Head hitbox positioned above the body capsule with a small clearance.
         GameObject head = new GameObject("Head");
         head.tag = "Head";
         head.transform.parent = bot.transform;
-        head.transform.localPosition = new Vector3(0, 1.75f, 0);
+        head.transform.localPosition = new Vector3(0, 1.7f, 0);
         SphereCollider headCol = head.AddComponent<SphereCollider>();
-        headCol.radius = 0.18f;
+        headCol.radius = 0.22f;
 
         // Eye point (line-of-sight raycasts)
         GameObject eye = new GameObject("EyePoint");
