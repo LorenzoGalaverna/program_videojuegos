@@ -111,8 +111,15 @@ public class MainMenu : MonoBehaviour
             if (GUI.Button(new Rect(btnX, cy + 20, btnW, btnH), "LAN  MULTIPLAYER", buttonStyle))
                 lanScreen = true;
 
+            // Map selector toggle ("Default" ↔ "Dust2"). The actual prefab is set on
+            // FPSBootstrap; this just flips SceneSetup.useCustomMap for the next build.
+            GUIStyle mapStyle = new GUIStyle(buttonStyle) { fontSize = 20 };
+            string mapLabel = "MAPA:  " + (SceneSetup.useCustomMap ? "DUST2" : "DEFAULT");
+            if (GUI.Button(new Rect(btnX, cy + 110, btnW, 50), mapLabel, mapStyle))
+                SceneSetup.useCustomMap = !SceneSetup.useCustomMap;
+
             GUIStyle quitStyle = new GUIStyle(buttonStyle) { fontSize = 18 };
-            if (GUI.Button(new Rect(btnX + btnW / 4f, cy + 130, btnW / 2f, 45), "Salir", quitStyle))
+            if (GUI.Button(new Rect(btnX + btnW / 4f, cy + 175, btnW / 2f, 45), "Salir", quitStyle))
             {
                 Application.Quit();
                 #if UNITY_EDITOR

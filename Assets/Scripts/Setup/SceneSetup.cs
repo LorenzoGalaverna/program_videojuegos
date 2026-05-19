@@ -22,6 +22,18 @@ public class SceneSetup : MonoBehaviour
     [HideInInspector] public GameObject sniperPrefab;
     [HideInInspector] public GameObject knifePrefab;
     [HideInInspector] public GameObject botBodyPrefab;
+
+    // Optional custom map prefab. If assigned AND useCustomMap is true, this is
+    // instantiated instead of running the procedural BuildMap(). Spawn points and
+    // GameManager are still created separately.
+    [HideInInspector] public GameObject customMapPrefab;
+    [HideInInspector] public float customMapScale = 1f;
+    [HideInInspector] public Vector3 customMapOffset = Vector3.zero;
+    [HideInInspector] public Vector3 customMapEuler = Vector3.zero;
+    [HideInInspector] public Vector3 customMapSpawnA = new Vector3(-20, 1.5f, -20);
+    [HideInInspector] public Vector3 customMapSpawnB = new Vector3( 20, 1.5f,  20);
+    // Selected by MainMenu before calling BuildScene().
+    public static bool useCustomMap = false;
     [HideInInspector] public float weaponPrefabScale = 1f;
     [HideInInspector] public Vector3 weaponPrefabOffset = Vector3.zero;
     [HideInInspector] public Vector3 weaponPrefabRotation = Vector3.zero;
@@ -56,7 +68,11 @@ public class SceneSetup : MonoBehaviour
         CreateMaterials();
 
         // 1. Build map (geometry must exist before NavMesh bake)
-        if (buildMap) BuildMap();
+        if (buildMap)
+        {
+            if (useCustomMap && customMapPrefab != null) BuildCustomMap();
+            else BuildMap();
+        }
 
         // 2. Bake NavMesh BEFORE creating any NavMeshAgent
         NavMeshSurface surface = FindAnyObjectByType<NavMeshSurface>();
@@ -172,6 +188,42 @@ public class SceneSetup : MonoBehaviour
         surface.collectObjects = CollectObjects.All;
 
         // Lighting - sol direccional simple
+        GameObject lightObj = new GameObject("Sun");
+        lightObj.transform.parent = map.transform;
+        lightObj.transform.rotation = Quaternion.Euler(50, -30, 0);
+        Light sun = lightObj.AddComponent<Light>();
+        sun.type = LightType.Directional;
+        sun.intensity = 2f;
+        sun.color = new Color(1f, 0.95f, 0.85f);
+    }
+
+    // Instantiates the user-assigned customMapPrefab (e.g. de_dust2 OBJ) instead of
+    // building the procedural geometry. Adds MeshColliders so bullets/players collide,
+    // a NavMeshSurface so the bot can pathfind, and a directional light.
+    private void BuildCustomMap()
+    {
+        GameObject map = new GameObject("Map_Custom");
+
+        GameObject inst = Instantiate(customMapPrefab, map.transform);
+        inst.transform.localPosition = customMapOffset;
+        inst.transform.localRotation = Quaternion.Euler(customMapEuler);
+        inst.transform.localScale = Vector3.one * Mathf.Max(customMapScale, 0.0001f);
+
+        // Ensure all visible meshes have a collider so the player can stand on / shoot them.
+        foreach (var mf in inst.GetComponentsInChildren<MeshFilter>(true))
+        {
+            if (mf.GetComponent<Collider>() != null) continue;
+            MeshCollider mc = mf.gameObject.AddComponent<MeshCollider>();
+            mc.sharedMesh = mf.sharedMesh;
+        }
+
+        // NavMeshSurface for bot pathfinding (collectObjects=All picks up the imported meshes)
+        GameObject navObj = new GameObject("NavMesh");
+        navObj.transform.parent = map.transform;
+        NavMeshSurface surface = navObj.AddComponent<NavMeshSurface>();
+        surface.collectObjects = CollectObjects.All;
+
+        // Sun
         GameObject lightObj = new GameObject("Sun");
         lightObj.transform.parent = map.transform;
         lightObj.transform.rotation = Quaternion.Euler(50, -30, 0);
@@ -875,18 +927,23 @@ public class SceneSetup : MonoBehaviour
         manager.killsToWin = 10;
         manager.roundTime = 180f;
 
-        // Create spawn points
+        // Create spawn points. For custom maps we use the user-defined anchor positions
+        // (set on FPSBootstrap) so spawns line up with the imported geometry instead of
+        // the procedural layout's hard-coded corners.
+        Vector3 baseA = (useCustomMap && customMapPrefab != null) ? customMapSpawnA : new Vector3(-20, 1.5f, -20);
+        Vector3 baseB = (useCustomMap && customMapPrefab != null) ? customMapSpawnB : new Vector3( 20, 1.5f,  20);
+
         Transform[] spawnsA = new Transform[3];
         Transform[] spawnsB = new Transform[3];
 
         for (int i = 0; i < 3; i++)
         {
             GameObject spA = new GameObject($"SpawnA_{i}");
-            spA.transform.position = new Vector3(-20 + i * 2, 1.5f, -20 + i);
+            spA.transform.position = baseA + new Vector3(i * 2, 0, i);
             spawnsA[i] = spA.transform;
 
             GameObject spB = new GameObject($"SpawnB_{i}");
-            spB.transform.position = new Vector3(20 - i * 2, 1.5f, 20 - i);
+            spB.transform.position = baseB + new Vector3(-i * 2, 0, -i);
             spawnsB[i] = spB.transform;
         }
 

@@ -570,6 +570,13 @@ MonoBehaviour:
   knifeScaleMultiplier: 2
   knifeExtraRotation: {x: 0, y: 0, z: 180}
   knifeExtraOffset: {x: 0, y: 0, z: 0}
+  customMapPrefab: {fileID: 919132149155446097, guid: 97e4b4c70580f0b47a797ccce48da67c,
+    type: 3}
+  customMapScale: 0.025
+  customMapOffset: {x: 0, y: 0, z: 0}
+  customMapEuler: {x: -90, y: 0, z: 0}
+  customMapSpawnA: {x: -30, y: 2, z: 0}
+  customMapSpawnB: {x: 30, y: 2, z: 0}
 --- !u!4 &1405726839
 Transform:
   m_ObjectHideFlags: 0

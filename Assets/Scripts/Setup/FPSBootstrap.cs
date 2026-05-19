@@ -41,6 +41,20 @@ public class FPSBootstrap : MonoBehaviour
     [Tooltip("Offset EXTRA SOLO para el cuchillo (se suma a Weapon Prefab Offset)")]
     public Vector3 knifeExtraOffset = Vector3.zero;
 
+    [Header("Mapa custom (ej. de_dust2)")]
+    [Tooltip("Arrastrá el modelo del mapa (Assets/Maps/Dust2/de_dust2). Si se asigna y el jugador elige 'Dust2' en el menú, se usa este en lugar del mapa procedural.")]
+    public GameObject customMapPrefab;
+    [Tooltip("Escala del mapa custom. El OBJ de dust2 viene en unidades de Source Engine (~1 unidad = 0.0254m), así que probá 0.02 a 0.05.")]
+    public float customMapScale = 0.025f;
+    [Tooltip("Offset de posición del mapa custom")]
+    public Vector3 customMapOffset = Vector3.zero;
+    [Tooltip("Rotación del mapa custom en grados (algunos OBJ vienen con Z arriba; probá (-90, 0, 0) si está acostado)")]
+    public Vector3 customMapEuler = new Vector3(-90, 0, 0);
+    [Tooltip("Posición base del spawn del equipo A (CT) en el mapa custom")]
+    public Vector3 customMapSpawnA = new Vector3(-30, 2f, 0);
+    [Tooltip("Posición base del spawn del equipo B (T) en el mapa custom")]
+    public Vector3 customMapSpawnB = new Vector3( 30, 2f, 0);
+
     private MainMenu menu;
 
     void Awake()
@@ -74,6 +88,12 @@ public class FPSBootstrap : MonoBehaviour
         setup.knifeScaleMultiplier = knifeScaleMultiplier;
         setup.knifeExtraRotation = knifeExtraRotation;
         setup.knifeExtraOffset = knifeExtraOffset;
+        setup.customMapPrefab = customMapPrefab;
+        setup.customMapScale = customMapScale;
+        setup.customMapOffset = customMapOffset;
+        setup.customMapEuler = customMapEuler;
+        setup.customMapSpawnA = customMapSpawnA;
+        setup.customMapSpawnB = customMapSpawnB;
 
         // Add main menu
         menu = gameObject.AddComponent<MainMenu>();
