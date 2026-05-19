@@ -299,6 +299,20 @@ public class NetworkedPlayer : NetworkBehaviour
 
     private bool isDeadVisual;
 
+    private void SetWeaponHolderVisible(bool visible)
+    {
+        // The first-person weapon is parented under the camera as "WeaponHolder".
+        // Disable all renderers under it (rather than the GameObject itself) so
+        // WeaponManager's references and audio sources stay intact for respawn.
+        Transform camHolder = transform.Find("CameraHolder");
+        if (camHolder == null) return;
+        Transform cam = camHolder.Find("PlayerCamera");
+        Transform holder = cam != null ? cam.Find("WeaponHolder") : null;
+        if (holder == null) return;
+        foreach (var r in holder.GetComponentsInChildren<Renderer>(true))
+            r.enabled = visible;
+    }
+
     private void PlayDeathAnimation()
     {
         if (thirdPersonAnimator == null && thirdPersonModel != null)
@@ -326,6 +340,9 @@ public class NetworkedPlayer : NetworkBehaviour
             if (pm)  pm.enabled = false;
             if (wm)  wm.enabled = false;
             if (hud) hud.enabled = false;        // hides crosshair + ammo HUD
+
+            // Hide the first-person weapon visuals (the gun is parented under the camera)
+            SetWeaponHolderVisible(false);
 
             StartCoroutine(DropCameraOnDeath());
         }
@@ -454,6 +471,9 @@ public class NetworkedPlayer : NetworkBehaviour
         if (pm)  pm.enabled  = true;
         if (wm)  wm.enabled  = true;
         if (hud) hud.enabled = true;
+
+        // Bring the first-person weapon visuals back
+        SetWeaponHolderVisible(true);
 
         MouseLook ml = GetComponentInChildren<MouseLook>();
         if (ml) ml.ResetLook();
