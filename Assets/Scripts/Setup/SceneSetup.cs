@@ -344,6 +344,10 @@ public class SceneSetup : MonoBehaviour
         hud.playerHealth = health;
         hud.weaponManager = wm;
 
+        // In-game pause menu (ESC → Reanudar / Salir del juego). Added to the local
+        // player so it works in both offline and LAN modes.
+        player.AddComponent<PauseMenu>();
+
         // Death handler — disable controls so the player can't move/shoot while dead.
         // In LAN mode: NetworkLobby handles score tracking and server-side respawn.
         // In offline mode: handle scoring and respawn locally.

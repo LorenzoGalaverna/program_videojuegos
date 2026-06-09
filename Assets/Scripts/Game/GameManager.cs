@@ -110,13 +110,40 @@ public class GameManager : MonoBehaviour
         return spawns[Random.Range(0, spawns.Length)];
     }
 
+    // Drops a spawn position straight down onto the nearest solid floor below it.
+    // The custom (Dust2) map's spawn anchors are hand-tuned and don't always sit exactly
+    // on the imported geometry, so without this the player free-falls off the map at spawn.
+    // Raycasts against the baked map colliders only — skips players/bots and triggers — and
+    // returns the original position unchanged if nothing solid is found beneath the anchor.
+    public static Vector3 SnapToGround(Vector3 pos)
+    {
+        const float startAbove    = 10f;   // begin the ray slightly above the anchor's intended height
+        const float maxDistance    = 60f;  // search this far downward for a floor
+        const float footClearance = 0.15f; // lift the CharacterController bottom just off the surface
+
+        Vector3 start = pos + Vector3.up * startAbove;
+        RaycastHit[] hits = Physics.RaycastAll(start, Vector3.down, maxDistance, ~0, QueryTriggerInteraction.Ignore);
+
+        bool found = false;
+        float bestY = float.NegativeInfinity;
+        foreach (var h in hits)
+        {
+            // Land on the map itself, never on a player or bot collider that happens to be there.
+            if (h.collider.GetComponentInParent<PlayerHealth>() != null) continue;
+            if (h.collider.GetComponentInParent<CharacterController>() != null) continue;
+            if (h.point.y > bestY) { bestY = h.point.y; found = true; }
+        }
+
+        return found ? new Vector3(pos.x, bestY + footClearance, pos.z) : pos;
+    }
+
     public void RespawnPlayer(GameObject player, int team)
     {
         Transform spawn = GetSpawnPoint(team);
         CharacterController cc = player.GetComponent<CharacterController>();
 
         if (cc) cc.enabled = false;
-        player.transform.position = spawn.position;
+        player.transform.position = SnapToGround(spawn.position);
         player.transform.rotation = spawn.rotation;
         if (cc) cc.enabled = true;
 

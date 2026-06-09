@@ -73,7 +73,9 @@ public class NetworkLobby : NetworkManager
         {
             int team = (slot % 2 == 0) ? 0 : 1;
             Transform sp = GameManager.Instance.GetSpawnPoint(team);
-            if (sp != null) { spawnPos = sp.position; spawnRot = sp.rotation; }
+            // Snap onto the real map floor — the Dust2 spawn anchors are hand-tuned and
+            // don't always sit on geometry, which otherwise makes the player fall off the map.
+            if (sp != null) { spawnPos = GameManager.SnapToGround(sp.position); spawnRot = sp.rotation; }
         }
 
         GameObject player = Instantiate(playerPrefab, spawnPos, spawnRot);
@@ -154,12 +156,16 @@ public class NetworkLobby : NetworkManager
         Transform sp = GameManager.Instance.GetSpawnPoint(team);
         if (sp != null)
         {
+            // Snap onto the real map floor (same reason as the initial spawn) so the
+            // player doesn't fall off the map after respawning.
+            Vector3 respawnPos = GameManager.SnapToGround(sp.position);
+
             // Reset position on the server's authoritative transform first so
             // NetworkTransform's next replication won't push the burrowed corpse
             // position back out to clients.
-            player.transform.position = sp.position;
+            player.transform.position = respawnPos;
             player.transform.rotation = sp.rotation;
-            np.RpcRespawnAt(sp.position, sp.rotation);
+            np.RpcRespawnAt(respawnPos, sp.rotation);
         }
     }
 
