@@ -76,6 +76,14 @@ public class NetworkLobby : NetworkManager
             // Snap onto the real map floor — the Dust2 spawn anchors are hand-tuned and
             // don't always sit on geometry, which otherwise makes the player fall off the map.
             if (sp != null) { spawnPos = GameManager.SnapToGround(sp.position); spawnRot = sp.rotation; }
+
+            // TEMP DIAGNOSTIC — remove once spawning is confirmed working.
+            Debug.Log($"[NetworkLobby] Spawn slot {slot}: anchor {(sp != null ? sp.position.ToString() : "NULL")} " +
+                      $"-> snapped {spawnPos} | map Y {GameManager.MapBottomY:F1}..{GameManager.MapTopY:F1}");
+        }
+        else
+        {
+            Debug.LogWarning("[NetworkLobby] OnServerAddPlayer: GameManager.Instance is NULL — player spawns at origin and will fall.");
         }
 
         GameObject player = Instantiate(playerPrefab, spawnPos, spawnRot);
@@ -167,6 +175,17 @@ public class NetworkLobby : NetworkManager
             player.transform.rotation = sp.rotation;
             np.RpcRespawnAt(respawnPos, sp.rotation);
         }
+    }
+
+    // Cleanly tear down whatever LAN role we're running (host / server / client) and
+    // clear the LAN flag so the next game starts fresh. Safe to call from the pause menu.
+    public void StopLan()
+    {
+        if (NetworkServer.active && NetworkClient.isConnected) StopHost();
+        else if (NetworkClient.active)                          StopClient();
+        else if (NetworkServer.active)                          StopServer();
+
+        IsLanActive = false;
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────────

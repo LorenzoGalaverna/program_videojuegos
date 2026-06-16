@@ -2,8 +2,8 @@ using UnityEngine;
 
 /// <summary>
 /// In-game pause menu. Added to the local player by SceneSetup.EquipPlayerInner.
-/// ESC toggles a Resume / Quit overlay, frees the cursor and suppresses local
-/// input. In offline mode it also freezes time; in LAN mode time keeps running
+/// ESC toggles a Resume / Main-menu / Quit overlay, frees the cursor and suppresses
+/// local input. In offline mode it also freezes time; in LAN mode time keeps running
 /// so the networked simulation doesn't desync.
 /// </summary>
 public class PauseMenu : MonoBehaviour
@@ -84,6 +84,24 @@ public class PauseMenu : MonoBehaviour
         if (!networked) Time.timeScale = 1f;
     }
 
+    private void ReturnToMainMenu()
+    {
+        // Always lift any freeze/pause state first.
+        Time.timeScale = 1f;
+        IsPaused = false;
+        paused = false;
+
+        // Grab the menu before tearing anything down — stopping the host destroys
+        // this player object (and therefore this component), so resolve it up front.
+        MainMenu menu = FindAnyObjectByType<MainMenu>(FindObjectsInactive.Include);
+
+        // Leave the LAN session cleanly if we're in one (no-op offline).
+        if (NetworkLobby.IsLanActive && Mirror.NetworkManager.singleton is NetworkLobby lobby)
+            lobby.StopLan();
+
+        if (menu != null) menu.ShowMenu();
+    }
+
     private void QuitGame()
     {
         // Restore time before tearing down so nothing is left frozen.
@@ -156,13 +174,16 @@ public class PauseMenu : MonoBehaviour
         float btnH = 64;
         float btnX = cx - btnW / 2f;
 
-        if (GUI.Button(new Rect(btnX, cy - 70, btnW, btnH), "REANUDAR", buttonStyle))
+        if (GUI.Button(new Rect(btnX, cy - 90, btnW, btnH), "REANUDAR", buttonStyle))
             Resume();
 
-        if (GUI.Button(new Rect(btnX, cy + 10, btnW, btnH), "SALIR DEL JUEGO", buttonStyle))
+        if (GUI.Button(new Rect(btnX, cy - 10, btnW, btnH), "MENÚ PRINCIPAL", buttonStyle))
+            ReturnToMainMenu();
+
+        if (GUI.Button(new Rect(btnX, cy + 70, btnW, btnH), "SALIR DEL JUEGO", buttonStyle))
             QuitGame();
 
-        GUI.Label(new Rect(0, cy + 95, Screen.width, 24),
+        GUI.Label(new Rect(0, cy + 155, Screen.width, 24),
             "Presioná ESC para reanudar", hintStyle);
     }
 }

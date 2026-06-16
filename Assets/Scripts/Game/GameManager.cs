@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.AI;
 
 public class GameManager : MonoBehaviour
 {
@@ -110,31 +111,61 @@ public class GameManager : MonoBehaviour
         return spawns[Random.Range(0, spawns.Length)];
     }
 
-    // Drops a spawn position straight down onto the nearest solid floor below it.
+    // World-space vertical span of the built map. SnapToGround casts its floor-finding
+    // ray from above the whole map down through it, so the snap works regardless of how
+    // the imported map is scaled/rotated/offset. SceneSetup.BuildCustomMap fills these in
+    // from the map's renderer bounds; the wide defaults cover the procedural map.
+    public static float MapTopY    =  500f;
+    public static float MapBottomY = -500f;
+
+    // Drops a spawn position straight down onto the floor the anchor was meant to sit on.
     // The custom (Dust2) map's spawn anchors are hand-tuned and don't always sit exactly
     // on the imported geometry, so without this the player free-falls off the map at spawn.
-    // Raycasts against the baked map colliders only — skips players/bots and triggers — and
-    // returns the original position unchanged if nothing solid is found beneath the anchor.
+    // Casts from above the entire map (using MapTopY/MapBottomY) so the ray can't fall
+    // short on a large/scaled map. Skips player/bot colliders and triggers, and returns the
+    // original position unchanged only if nothing solid is found in the column at all.
     public static Vector3 SnapToGround(Vector3 pos)
     {
-        const float startAbove    = 10f;   // begin the ray slightly above the anchor's intended height
-        const float maxDistance    = 60f;  // search this far downward for a floor
-        const float footClearance = 0.15f; // lift the CharacterController bottom just off the surface
+        const float footClearance = 0.1f; // lift the CharacterController's feet just off the surface
+        const float tolerance     = 1f;   // surfaces within 1m above the anchor still count as "the floor"
 
-        Vector3 start = pos + Vector3.up * startAbove;
-        RaycastHit[] hits = Physics.RaycastAll(start, Vector3.down, maxDistance, ~0, QueryTriggerInteraction.Ignore);
+        // Span the whole map vertically (plus the anchor itself, in case it sits outside).
+        float top    = Mathf.Max(MapTopY, pos.y) + 5f;
+        float bottom = Mathf.Min(MapBottomY, pos.y) - 5f;
+        Vector3 start = new Vector3(pos.x, top, pos.z);
 
-        bool found = false;
-        float bestY = float.NegativeInfinity;
+        RaycastHit[] hits = Physics.RaycastAll(start, Vector3.down, top - bottom, ~0, QueryTriggerInteraction.Ignore);
+
+        // Prefer the highest solid surface at/just-below the anchor (the floor under the
+        // feet); if the anchor sits just under the geometry, fall back to the lowest
+        // surface above it. Never snap onto a player/bot collider.
+        float bestBelow = float.NegativeInfinity; bool foundBelow = false;
+        float bestAbove = float.PositiveInfinity; bool foundAbove = false;
+
         foreach (var h in hits)
         {
-            // Land on the map itself, never on a player or bot collider that happens to be there.
             if (h.collider.GetComponentInParent<PlayerHealth>() != null) continue;
             if (h.collider.GetComponentInParent<CharacterController>() != null) continue;
-            if (h.point.y > bestY) { bestY = h.point.y; found = true; }
+
+            float y = h.point.y;
+            if (y <= pos.y + tolerance) { if (y > bestBelow) { bestBelow = y; foundBelow = true; } }
+            else                        { if (y < bestAbove) { bestAbove = y; foundAbove = true; } }
         }
 
-        return found ? new Vector3(pos.x, bestY + footClearance, pos.z) : pos;
+        if (foundBelow) return new Vector3(pos.x, bestBelow + footClearance, pos.z);
+        if (foundAbove) return new Vector3(pos.x, bestAbove + footClearance, pos.z);
+
+        // Nothing solid in the column at the anchor's XZ — the anchor is off the geometry.
+        // Snap to the nearest walkable NavMesh point (the same floor the bot pathfinds on),
+        // which guarantees a valid spawn even when the anchor is misplaced horizontally.
+        if (NavMesh.SamplePosition(pos, out NavMeshHit nav, 50f, NavMesh.AllAreas))
+            return nav.position + Vector3.up * footClearance;
+
+        Debug.LogWarning(
+            $"[GameManager] SnapToGround found no floor for spawn {pos} " +
+            $"(map Y range {MapBottomY:F1}..{MapTopY:F1}, {hits.Length} ray hits, no NavMesh nearby). " +
+            $"Player will fall — move the Custom Map Spawn A/B anchors so they sit over the map.");
+        return pos;
     }
 
     public void RespawnPlayer(GameObject player, int team)

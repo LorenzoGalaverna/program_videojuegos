@@ -217,6 +217,21 @@ public class SceneSetup : MonoBehaviour
             mc.sharedMesh = mf.sharedMesh;
         }
 
+        // Record the map's world-space vertical extent so GameManager.SnapToGround can cast
+        // its floor-finding ray from above the whole map, regardless of scale/rotation/offset.
+        Bounds bounds = default;
+        bool hasBounds = false;
+        foreach (var r in inst.GetComponentsInChildren<Renderer>())
+        {
+            if (!hasBounds) { bounds = r.bounds; hasBounds = true; }
+            else bounds.Encapsulate(r.bounds);
+        }
+        if (hasBounds)
+        {
+            GameManager.MapTopY    = bounds.max.y;
+            GameManager.MapBottomY = bounds.min.y;
+        }
+
         // NavMeshSurface for bot pathfinding (collectObjects=All picks up the imported meshes)
         GameObject navObj = new GameObject("NavMesh");
         navObj.transform.parent = map.transform;
