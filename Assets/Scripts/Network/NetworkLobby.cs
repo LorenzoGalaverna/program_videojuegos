@@ -76,14 +76,6 @@ public class NetworkLobby : NetworkManager
             // Snap onto the real map floor — the Dust2 spawn anchors are hand-tuned and
             // don't always sit on geometry, which otherwise makes the player fall off the map.
             if (sp != null) { spawnPos = GameManager.SnapToGround(sp.position); spawnRot = sp.rotation; }
-
-            // TEMP DIAGNOSTIC — remove once spawning is confirmed working.
-            Debug.Log($"[NetworkLobby] Spawn slot {slot}: anchor {(sp != null ? sp.position.ToString() : "NULL")} " +
-                      $"-> snapped {spawnPos} | map Y {GameManager.MapBottomY:F1}..{GameManager.MapTopY:F1}");
-        }
-        else
-        {
-            Debug.LogWarning("[NetworkLobby] OnServerAddPlayer: GameManager.Instance is NULL — player spawns at origin and will fall.");
         }
 
         GameObject player = Instantiate(playerPrefab, spawnPos, spawnRot);
